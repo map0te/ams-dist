@@ -1,0 +1,4 @@
+[submodule "cadical"]
+	path = cadical
+	url = https://github.com/map0te/cadical
+	branch = ams-dist
