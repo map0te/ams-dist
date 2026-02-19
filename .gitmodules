@@ -2,3 +2,7 @@
 	path = cadical
 	url = https://github.com/map0te/cadical
 	branch = ams-dist
+[submodule "MathCheck"]
+	path = MathCheck
+	url = https://github.com/BrianLi009/MathCheck.git
+	branch = main
