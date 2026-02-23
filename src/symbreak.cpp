@@ -94,12 +94,10 @@ SymmetryBreaker::~SymmetryBreaker () {
     }
 }
 
-void SymmetryBreaker::notify_assignment(int lit, bool is_fixed) {
-    assign[abs(lit)-1] = (lit > 0 ? l_True : l_False);
-    if (is_fixed) {
-        fixed[abs(lit)-1] = true;
-    } else {
-        current_trail.back().push_back(lit);
+void SymmetryBreaker::notify_assignment(const std::vector<int> &lits) {
+	for (auto lit : lits) {
+    	assign[abs(lit)-1] = (lit > 0 ? l_True : l_False);
+    	current_trail.back().push_back(lit);
     }
 }
 
@@ -149,7 +147,8 @@ bool SymmetryBreaker::cb_check_found_model (const std::vector<int> & model) {
     return false;
 }
 
-bool SymmetryBreaker::cb_has_external_clause () {
+bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
+	is_forgettable = false;
     if(!new_clauses.empty())
         return true;
 
@@ -293,7 +292,7 @@ bool SymmetryBreaker::cb_has_external_clause () {
                     fprintf(noncanonicaloutfile, "0\n");
                     fflush(noncanonicaloutfile);
                 }
-
+				/*
                 if(solver->permoutfile != NULL) {
                     for(int j = 0; j <= mi; j++)
                         fprintf(solver->permoutfile, "%s%d", j == 0 ? "" : " ", p[j]);
@@ -301,6 +300,7 @@ bool SymmetryBreaker::cb_has_external_clause () {
                 }
 
                 return true;
+				*/
             }
         }
     }
@@ -362,7 +362,8 @@ bool SymmetryBreaker::cb_has_external_clause () {
                 fflush(musoutfile);
             }
 
-            if(solver->permoutfile != NULL) {
+            /*
+			if(solver->permoutfile != NULL) {
                 fprintf(solver->permoutfile, "Minimal unembeddable subgraph %d:", g);
                 int mii = 10;
                 if(g >= 2 && g < 7)
@@ -374,6 +375,7 @@ bool SymmetryBreaker::cb_has_external_clause () {
                 }
                 fprintf(solver->permoutfile, "\n");
             }
+			*/
             return true;
         }
     }

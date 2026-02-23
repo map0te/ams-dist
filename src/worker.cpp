@@ -1,3 +1,7 @@
+#include <filesystem>
+
+#include <mpi.h>
+
 #include "cube.hpp"
 #include "def.hpp"
 #include "internal.hpp"
@@ -17,20 +21,22 @@ void Worker::write_file() {
 }
 
 void Worker::isend_active() {
-    MPI_ISend(&progress, 1, MPI_INT, ROOT, PROGRESS, MPI_COMM_WORLD, &progress_req);
+    MPI_Isend(&progress, 1, MPI_INT, ROOT, PROGRESS, MPI_COMM_WORLD, &progress_req);
     MPI_Request_free(&progress_req);
 }
 
-void Worker::send_cubeids(int count) {
+void Worker::send_cubes(int count) {
     MPI_Send(&count, 1, MPI_INT, ROOT, CUBENUM, MPI_COMM_WORLD);
     if (count) {
-        // send cube ids
+        // send cubes
         std::string id1 = cube.id + "1";
         std::string id2 = cube.id + "2";
-        MPI_Send(id1.c_str(), id1.size()+1, MPI_CHAR,
-            ROOT, CUBEID, MPI_COMM_WORLD);
-        MPI_Send(id2.c_str(), id2.size()+1, MPI_CHAR,
-            ROOT, CUBEID, MPI_COMM_WORLD);
+        Cube c1 = cube;
+        Cube c2 = cube;
+        c1.id = id1;
+        c2.id = id2;
+        send_cubestr(ROOT, c1.str());
+        send_cubestr(ROOT, c2.str());
     }   
 }
 
@@ -49,9 +55,6 @@ void Worker::format_res(int res) {
 int Worker::simplify() {
     // setup solver
     solver = new CaDiCaL::Solver ();
-    CaDiCaL::Signal::alarm (TIMELIMIT);
-    CaDiCaL::Signal::set (this);
-    solver->limit ("proofsize", PROOFSIZE);
     solver->limit ("conflicts", SIMPLIMIT);
 
     // simplify
@@ -60,6 +63,7 @@ int Worker::simplify() {
     read_file(solving_file.c_str());
     SymmetryBreaker* se = new SymmetryBreaker(solver, cube.order, 0);
     res = solver->solve ();
+    cube.active = solver->active();
     if (res == 0) { write_file(); } else { std::remove(cube.name.c_str()); }
     format_res(res);
     delete se;
@@ -86,7 +90,7 @@ int Worker::solve(bool interruptable) {
     SymmetryBreaker* se = new SymmetryBreaker(solver, cube.order, 0);
     start_ts = clock();
     res = solver->solve ();
-    if (res == 0) { write_file(); } else { std::remove(cube.name_cstr()); }
+    if (res == 0) { write_file(); } else { std::remove(cube.name.c_str()); }
     format_res(res);
     delete se;
     delete solver;
@@ -103,9 +107,9 @@ bool Worker::terminate() {
         // send progress
         // warmup solving period, should not be preempted
         if ((clock() - start_ts) / CLOCKS_PER_SEC > WARMUP) {
-            if (!p_flag || solver->active() < prev_progress) {
+            if (!p_flag || solver->active() < progress) {
                 p_flag = true;
-                prev_progress = solver->active();
+                progress = solver->active();
                 isend_active();
             }
         }
@@ -134,11 +138,11 @@ int Worker::split() {
     cube_cmd << "-d 1 -m " << cube.order*(cube.order-1)/2 << " ";
     cube_cmd << "-o " << cube_file.str();
 
-    apply_cmd1 << "./gen_cubes/apply.sh ";
+    apply_cmd1 << "./apply.sh ";
     apply_cmd1 << cube.name << ".simp " << cube_file.str() << " 1 > ";
     apply_cmd1 << cube.top_name << "." << cube.id << "1.cnf";
 
-    apply_cmd2 << "./gen_cubes/apply.sh ";
+    apply_cmd2 << "./apply.sh ";
     apply_cmd2 << cube.name << ".simp " << cube_file.str() << " 2 > ";
     apply_cmd2 << cube.top_name << "." << cube.id << "2.cnf";
 
@@ -169,20 +173,16 @@ void Worker::start() {
         count = 0;
 
         // recieve cube
-        printf("rank %d recv_cube\n", rank);
-        fflush(stdout);
-        cubestr = recv_cube(ROOT, CUBESTR);
+        cubestr = recv_cubestr(ROOT, CUBESTR);
         if (!cubestr.size()) { break; } // end
         cube = Cube(cubestr);
-        printf("rank %d recieved %s\n", rank, cube.name.c_str());
-        fflush(stdout);
         state = cube.status;
 
         // if forced cubing
         if (state == CUBING) {
             count = simplify() ? 0 : 2;
             if (count) { count = split(); }
-            send_cubeids(count, ROOT);
+            send_cubes(count);
         }
 
         // if solve
@@ -192,7 +192,7 @@ void Worker::start() {
                 MPI_COMM_WORLD, &interrupt_req);
             int res = solve(true);
             if (!res) { count = split(); }
-            send_cubeids(count, ROOT);
+            send_cubes(count);
             // clean up interrupt request
             MPI_Wait(&interrupt_req, MPI_STATUS_IGNORE); 
             //MPI_Request_free(&interrupt_req);

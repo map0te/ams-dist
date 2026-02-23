@@ -3,31 +3,44 @@
 
 #include <set>
 
+struct StatEntry {
+    int rank;
+    int progress;
+    bool operator<(const StatEntry& rhs) const {
+        return progress < rhs.progress;
+    }
+    bool operator==(const StatEntry& rhs) const {
+        return rank == rhs.rank;
+    }
+};
+
 class StatTrack {
-    struct Entry {
-        int rank;
-        int progress;
-        bool operator<(const Entry& rhs) const {
-            return progress < rhs.progress;
-        }
-        bool operator==(const Entr&& rhs) const {
-            return rank == rhs.rank;
-        }
-    };
-    std::set<Entry> stats;
-    Entry top() { return stats.top(); };
-    void pop() { return stats.pop(); };
+    public:
+    std::multiset<StatEntry> stats;
+    StatEntry pop();
+    size_t size() { return stats.size(); };
+    void erase(int rank);
     void update(int rank, int progress);
 };
 
-void StatTrack::update(int rank, int progress) {
-    for (auto it = stats.begin(); it < stats.end(); it++) {
-        if ((*it).rank == rank) {
+StatEntry StatTrack::pop() {
+    StatEntry entry = *(stats.begin());
+    stats.erase(stats.begin());
+    return entry;
+}
+
+void StatTrack::erase(int rank) {
+    for (auto it = stats.begin(); it != stats.end(); it++) {
+        if (it->rank == rank) {
             stats.erase(it);
             break;
         }
     }
-    Entry new_entry = Entry(rank, progress);
+}
+
+void StatTrack::update(int rank, int progress) {
+    erase(rank);
+    StatEntry new_entry = {rank, progress};
     stats.insert(new_entry);
 }
 

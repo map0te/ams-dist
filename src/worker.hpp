@@ -3,9 +3,9 @@
 
 #include <mpi.h>
 
+#include "cube.hpp"
 #include "internal.hpp"
-
-class Cube;
+#include "signal.hpp"
 
 class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
     public:
@@ -25,7 +25,7 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
         int simplify();
         int solve(bool interruptable);
         void format_res(int res);
-        int eliminated() { max_var - solver->active(); };
+        //int eliminated() { max_var - solver->active(); };
 
         void write_file();
         void read_file(std::string name);
@@ -41,7 +41,7 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
         /*--------- Message Handler ----------*/
         MPI_Request interrupt_req, progress_req; 
         void isend_active();
-        void send_cubeids(int count);
+        void send_cubes(int count);
 
         /*--------- Worker ----------*/
         int state, rank;

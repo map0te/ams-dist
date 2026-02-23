@@ -587,9 +587,9 @@ int main(int argc, char** argv) {
     parse_cnf(opt.filename.c_str());
     auto io_end = std::chrono::high_resolution_clock::now();
 
-    printf("%d variables will be considered for cubing\n", opt.m_vars);
+    printf("c %d variables will be considered for cubing\n", opt.m_vars);
     auto free_vars = list_free_vars(opt.m_vars);
-    printf("No. of free variables: %zu\n", free_vars.size());
+    printf("c No. of free variables: %zu\n", free_vars.size());
     if (opt.debug) {
         printf("Free variables:");
         for (int v : free_vars) printf(" %d", v);
@@ -631,7 +631,7 @@ int main(int argc, char** argv) {
             for (int lit : c.lits) out << " " << lit;
             out << " 0\n";
         }
-        printf("Saved cubes to file  %s\n", opt.out_file.c_str());
+        printf("c Saved cubes to file  %s\n", opt.out_file.c_str());
     }
     auto write_end = std::chrono::high_resolution_clock::now();
     double parse_time = std::chrono::duration<double>(io_end - io_start).count();
@@ -650,11 +650,11 @@ int main(int argc, char** argv) {
     }
 
     double cubing_time = score_time + mcts_time + cube_time + write_time;
-    printf("Time taken for cubing:  %.3f\n", cubing_time);
+    printf("c Time taken for cubing:  %.3f\n", cubing_time);
 
-    printf("Number of nodes:  %d\n", mcts.node_created);
+    printf("c Number of nodes:  %d\n", mcts.node_created);
     double total_time = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - total_start).count();
-    printf("Tool runtime:  %.3f\n", total_time);
+    printf("c Tool runtime:  %.3f\n", total_time);
     if (opt.debug) {
         printf("Output cube vars (after d cutoff):");
         for (int v : output_vars) printf(" %d", v);
