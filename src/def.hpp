@@ -1,38 +1,72 @@
 #ifndef DEFHPP
 #define DEFHPP
 
+#include <mpi.h>
+
 #define ROOT 0
 
 #define NUMSKIP 100
 #define WARMUP 30
+
+#define MAXIDLENGTH 512
 
 #define SIMPLIMIT 10000
 #define PROOFSIZE 7168
 #define TIMELIMIT 7200
 #define NUMMCTS 100
 
-// worker state
-enum { 
-	IDLE = 1,
-	CUBING = 2,
-	SOLVING = 3,
-	TERMINATED = 4 
+// MPI struct datatypes
+extern MPI_Datatype MPI_CUBEINFO;
+extern MPI_Datatype MPI_TASKINFO;
+extern MPI_Datatype MPI_VARSCORE;
+
+enum TASK_TYPE {
+	CUBE,
+	DCUBE,
+	SIMPLIFY,
+	SOLVE,
+	END
 };
 
-// cube state
-enum { 
+enum WORKER_STATE { 
+	IDLE,
+	CUBING,
+	DCUBING,
+	SIMPLIFYING,
+	SOLVING,
+	TERMINATED 
+};
+
+enum CUBE_STATE { 
 	UNKNOWN = 0,
 	SAT = 10,
 	UNSAT = 20 
 };
 
-// message id
-enum { 
-	PROGRESS = 100,
-	INTERRUPT = 101,
-	CUBESTR = 102,
-	CUBENUM = 103,
-	CUBEID = 104
+enum MESSAGE_TYPE { 
+	M_PROGRESS,
+	M_INTERRUPT,
+	M_TASKINFO,
+	M_NUMCUBE,
+	M_CUBEINFO,
+};
+
+struct InstanceInfo {
+	int order;
+	const char *top_name;
+};
+
+struct CubeInfo {
+	int active;
+	int status;
+	long n_solutions;
+	char id[MAXIDLENGTH];
+	bool operator< (const CubeInfo rhs) const { return active > rhs.active; };
+};
+
+struct TaskInfo {
+	int type;
+	int n_cubeinfo;
 };
 
 #endif

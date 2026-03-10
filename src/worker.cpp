@@ -2,10 +2,10 @@
 
 #include <mpi.h>
 
-#include "cube.hpp"
-#include "def.hpp"
 #include "internal.hpp"
 #include "signal.hpp"
+
+#include "def.hpp"
 #include "symbreak.hpp"
 #include "worker.hpp"
 
@@ -16,38 +16,77 @@ void Worker::read_file(std::string name) {
 }
 
 void Worker::write_file() {
-    std::string output_path = cube.name + ".simp";
+    std::string output_path = current_instance + ".simp";
     solver->write_dimacs (output_path.c_str(), max_var);
 }
 
-void Worker::isend_active() {
-    MPI_Isend(&progress, 1, MPI_INT, ROOT, PROGRESS, MPI_COMM_WORLD, &progress_req);
-    MPI_Request_free(&progress_req);
+int Worker::recv_task() {
+    MPI_Recv(&task, 1, MPI_TASKINFO, 0, M_TASKINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    std::vector<CubeInfo> cubes;
+    cubes.resize(task.n_cubeinfo);
+    if (task.type == SIMPLIFY) {
+        MPI_Recv(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        cube = cubes.front();
+        if (!std::strcmp(cube.id, "")) {
+            current_instance = std::string(instance.top_name);
+        } else {
+            current_instance = std::string(instance.top_name) + "." + std::string(cube.id) + ".cnf";
+        }
+        simplify();
+        return 1;
+    }
+    if (task.type == DCUBE) {
+        MPI_Bcast(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, MPI_COMM_WORLD);
+        cube = cubes[rank % task.n_cubeinfo];
+        // Create mpi communicators per cubing task
+        MPI_Comm comm;
+        MPI_Comm_split(MPI_COMM_WORLD, rank % task.n_cubeinfo, rank, &comm);
+        if (!std::strcmp(cube.id, "")) {
+            current_instance = std::string(instance.top_name) + ".simp";
+        } else {
+            current_instance = std::string(instance.top_name) + "." + std::string(cube.id) + ".cnf.simp";
+        }
+        std::string out1 = std::string(instance.top_name) + "." + std::string(cube.id) + "1.cnf";
+        std::string out2 = std::string(instance.top_name) + "." + std::string(cube.id) + "2.cnf";
+        beamlookahead.setup(instance.order, current_instance.c_str(), comm);
+        beamlookahead.lookahead();
+        beamlookahead.write_cubes(current_instance.c_str(), out1.c_str(), out2.c_str());
+        MPI_Barrier(MPI_COMM_WORLD);
+        int dcube_rank;
+        MPI_Comm_rank(comm, &dcube_rank);
+        if (dcube_rank == 0) {
+            int ncube = 2;
+            std::string c1id = std::string(cube.id) + "1";
+            std::string c2id = std::string(cube.id) + "2";
+            CubeInfo c[2];
+            strcpy(c[0].id, c1id.c_str());
+            strcpy(c[1].id, c2id.c_str());
+            MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
+            MPI_Send(c, ncube, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD);
+        }
+        return 1;
+    }
+    return 0;
 }
 
-void Worker::send_cubes(int count) {
-    MPI_Send(&count, 1, MPI_INT, ROOT, CUBENUM, MPI_COMM_WORLD);
-    if (count) {
-        // send cubes
-        std::string id1 = cube.id + "1";
-        std::string id2 = cube.id + "2";
-        Cube c1 = cube;
-        Cube c2 = cube;
-        c1.id = id1;
-        c2.id = id2;
-        send_cubestr(ROOT, c1.str());
-        send_cubestr(ROOT, c2.str());
-    }   
+void Worker::send_simplify_result(int res) {
+    int ncube = 1;
+    MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
+    MPI_Send(&cube, ncube, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD);
+}
+
+bool Worker::terminate() {
+    return false;
 }
 
 void Worker::format_res(int res) {
-    printf("c ----- %d RESULT: ", rank);
+    printf("[Rank %d] Result: ", rank);
     if (res == 0) {
-        printf("UNKNOWN -----\n");
+        printf("unknown\n");
     } else if (res == 10) {
-        printf("SATISFIABLE -----\n");
+        printf("sat\n");
     } else {
-        printf("UNSATISFIABLE -----\n");
+        printf("unsat\n");
     }
     fflush(stdout);
 }
@@ -56,29 +95,43 @@ int Worker::simplify() {
     // setup solver
     solver = new CaDiCaL::Solver ();
     solver->limit ("conflicts", SIMPLIMIT);
+    solver->set("quiet", 1);
+    
+    //solver->set("inprobeint", 100);
+    //solver->set("probeeffort", 20);
+    solver->set("factor", false);
+    solver->set("factorunbump", false);
+    solver->set("preprocesslight", false);
+    if (strcmp(cube.id, "")) { solver->set("inprobing", false); }
+    //solver->set("inprocessing", false);
 
     // simplify
-    std::string solving_file = cube.name;
-    printf("c ----- SIMPLIFY -----\n");
-    read_file(solving_file.c_str());
-    SymmetryBreaker* se = new SymmetryBreaker(solver, cube.order, 0);
+    //printf("[Rank %d] Simplify %s\n", rank, cube.id); fflush(stdout);
+    read_file(current_instance.c_str());
+    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, 0);
     res = solver->solve ();
     cube.active = solver->active();
-    if (res == 0) { write_file(); } else { std::remove(cube.name.c_str()); }
-    format_res(res);
+    cube.n_solutions = se->n_sol();
+    if (res == 0) { write_file(); cube.status = UNKNOWN;} else { cube.status = UNSAT; }
+    send_simplify_result(res);
+    //format_res(res);
     delete se;
     delete solver;
     solver = 0;
     return res;
 }
 
-int Worker::solve(bool interruptable) {
+/*int Worker::solve(bool interruptable) {
     // setup solver
     assert (!solver);
     solver = new CaDiCaL::Solver ();
     CaDiCaL::Signal::alarm (TIMELIMIT);
     CaDiCaL::Signal::set (this);
     solver->limit ("proofsize", PROOFSIZE);
+
+    solver->set("factor", false);
+    solver->set("factorunbump", false);
+    solver->set("inprobing", false);
 
     // terminiator for solving
     p_flag = false;
@@ -96,107 +149,9 @@ int Worker::solve(bool interruptable) {
     delete solver;
     solver = 0;
     return res;
-}
-
-bool Worker::terminate() {
-    if (timesup)
-        return true;
-    // check every NUMSKIP termination calls to reduce overhead
-    if (counter % NUMSKIP == 0) {
-        counter = 1;
-        // send progress
-        // warmup solving period, should not be preempted
-        if ((clock() - start_ts) / CLOCKS_PER_SEC > WARMUP) {
-            if (!p_flag || solver->active() < progress) {
-                p_flag = true;
-                progress = solver->active();
-                isend_active();
-            }
-        }
-        // probe interrupt request
-        int flag = false;
-        MPI_Test(&interrupt_req, &flag, MPI_STATUS_IGNORE);
-        return flag;
-    } else {
-        counter++;
-        return false;
-    }
-}
-
-int Worker::split() {
-    // in order to generate cubes, we must call a python
-    // program via a system call as this is the easiest
-    // and most reliable method
-
-    std::stringstream apply_cmd1, apply_cmd2;
-    std::stringstream cube_cmd, cube_file;
-    cube_file << cube.top_name;
-    cube_file << "." << cube.id << ".cube";
-
-    cube_cmd << "./simple_mcts ";
-    cube_cmd << cube.name + ".simp ";
-    cube_cmd << "-d 1 -m " << cube.order*(cube.order-1)/2 << " ";
-    cube_cmd << "-o " << cube_file.str();
-
-    apply_cmd1 << "./apply.sh ";
-    apply_cmd1 << cube.name << ".simp " << cube_file.str() << " 1 > ";
-    apply_cmd1 << cube.top_name << "." << cube.id << "1.cnf";
-
-    apply_cmd2 << "./apply.sh ";
-    apply_cmd2 << cube.name << ".simp " << cube_file.str() << " 2 > ";
-    apply_cmd2 << cube.top_name << "." << cube.id << "2.cnf";
-
-    system(cube_cmd.str().c_str());
-
-    // workaround for no cube generated
-    std::uintmax_t size = std::filesystem::file_size(cube_file.str());
-    if (size == 5) {
-        cube.name = cube.name + ".simp";
-        solve(false);
-        return 0;
-    }
-
-    system(apply_cmd1.str().c_str());
-    system(apply_cmd2.str().c_str());
-    std::remove(cube.name.c_str());
-    std::remove((cube.name + ".simp").c_str());
-    return 2;
-}
+}*/
 
 void Worker::start() {
-    std::string cubestr;
-    int count;
-
-    // work loop
-    for (;;) {
-        state = IDLE;
-        count = 0;
-
-        // recieve cube
-        cubestr = recv_cubestr(ROOT, CUBESTR);
-        if (!cubestr.size()) { break; } // end
-        cube = Cube(cubestr);
-        state = cube.status;
-
-        // if forced cubing
-        if (state == CUBING) {
-            count = simplify() ? 0 : 2;
-            if (count) { count = split(); }
-            send_cubes(count);
-        }
-
-        // if solve
-        else if (state == SOLVING) {
-            // setup interrupt request
-            MPI_Irecv(NULL, 0, MPI_INT, ROOT, INTERRUPT, 
-                MPI_COMM_WORLD, &interrupt_req);
-            int res = solve(true);
-            if (!res) { count = split(); }
-            send_cubes(count);
-            // clean up interrupt request
-            MPI_Wait(&interrupt_req, MPI_STATUS_IGNORE); 
-            //MPI_Request_free(&interrupt_req);
-        }
-    }
+    while (recv_task()) {;}
 }
 

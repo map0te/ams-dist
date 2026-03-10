@@ -14,7 +14,7 @@ struct StatEntry {
     }
 };
 
-class StatTrack {
+class StatusTracker {
     public:
     std::multiset<StatEntry> stats;
     StatEntry pop();

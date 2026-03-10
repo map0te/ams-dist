@@ -15,16 +15,8 @@
 #include "beamlookahead.hpp"
 #include "def.hpp"
 
-MPI_Datatype MPI_VARSCORE;
-
 BeamLookahead::~BeamLookahead() {
     if (assignments == 0) { return; }
-    for (int i = 0; i < bimp.size(); i++) {
-        free(bimp[i]);
-    }
-    delete[] global_queue;
-    delete[] assignments;
-    delete[] is_unit_var;
 }
 
 inline int BeamLookahead::lit_index(int lit) {
@@ -39,6 +31,20 @@ inline void BeamLookahead::reset_assignments() {
 inline bool BeamLookahead::is_preselected(int var) {
     if (is_unit_var[var]) return false;  // Exclude unit clause variables
     return bimp_size[lit_index(var)] > 0 || bimp_size[lit_index(-var)] > 0;
+}
+
+inline bool BeamLookahead::is_lit_true(int lit) {
+    int var = abs(lit);
+    if (assignments[var] == ASSIGN_NONE) return false;
+    return (lit > 0 && assignments[var] == ASSIGN_TRUE) ||
+           (lit < 0 && assignments[var] == ASSIGN_FALSE);
+}
+
+inline bool BeamLookahead::is_lit_false(int lit) {
+    int var = abs(lit);
+    if (assignments[var] == ASSIGN_NONE) return false;
+    return (lit > 0 && assignments[var] == ASSIGN_FALSE) ||
+           (lit < 0 && assignments[var] == ASSIGN_TRUE);
 }
 
 void BeamLookahead::add_bimp(int lit, int implied) {
@@ -60,11 +66,13 @@ void BeamLookahead::parse_cnf(const char *filename) {
     MPI_Status status;
     int rank, size;
     int err;
-    MPI_Comm comm = MPI_COMM_WORLD;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
 
     err = MPI_File_open(comm, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+    if (err) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
     MPI_File_get_size(fh, &file_size);
 
     char header[HEADER_BUF];
@@ -118,10 +126,10 @@ void BeamLookahead::parse_cnf(const char *filename) {
     }
 
     std::vector<int> local_clause_literals;
-    std::vector<int> local_clause_idx;
+    std::vector<unsigned long> local_clause_idx;
 
     char *token = strtok(local_start, " \n\t");
-    int idx = 0;
+    unsigned long idx = 0;
     if (rank == 0) { local_clause_idx.push_back(0); }
     while (token != NULL) {
         int val = atoi(token);
@@ -174,8 +182,8 @@ void BeamLookahead::parse_cnf(const char *filename) {
 
     clause_idx.resize(total_clause_idx_read);
 
-    MPI_Allgatherv(local_clause_idx.data(), local_clause_idx_read, MPI_INT,
-        clause_idx.data(), clause_idx_read, clause_idx_read_offsets, MPI_INT, comm);
+    MPI_Allgatherv(local_clause_idx.data(), local_clause_idx_read, MPI_UNSIGNED_LONG,
+        clause_idx.data(), clause_idx_read, clause_idx_read_offsets, MPI_UNSIGNED_LONG, comm);
 
     delete[] clause_idx_read;
     delete[] clause_idx_read_offsets;
@@ -189,19 +197,25 @@ void BeamLookahead::parse_cnf(const char *filename) {
     bimp_size.resize(n_vars * 2 + 2);
     bimp_capacity.resize(n_vars * 2 + 2);
 
+    watched.resize(n_clauses);
+    watch_list.resize(n_vars * 2 + 2);
+    global_queue = new int [n_vars + 1]();
+    assignments = new uint8_t [n_vars + 1]();
+    is_unit_var = new uint8_t [n_vars + 1]();
+
     for (int i = 1; i < clause_idx.size(); i++) {
         if (clause_idx[i] - clause_idx[i-1] == 1) {
             is_unit_var[abs(clause_literals[clause_idx[i-1]])] = 1;
         } else if (clause_idx[i] - clause_idx[i-1] == 2) {
             add_bimp(-clause_literals[clause_idx[i-1]], clause_literals[clause_idx[i-1]+1]);
             add_bimp(-clause_literals[clause_idx[i-1]+1], clause_literals[clause_idx[i-1]]);
+        } else {
+            watched[i-1].first = 0;
+            watched[i-1].second = 1;
+            watch_list[lit_index(clause_literals[clause_idx[i-i]])].push_back(i-1);
+            watch_list[lit_index(clause_literals[clause_idx[i-1]+1])].push_back(i-1);
         }
     }
-
-    clause_stamp.resize(n_clauses);
-    global_queue = new int [n_vars + 1]();
-    assignments = new uint8_t [n_vars + 1]();
-    is_unit_var = new uint8_t [n_vars + 1]();
 }
 
 int BeamLookahead::propagate_bimp(int lit, std::vector<int>& propagated) {
@@ -229,32 +243,75 @@ int BeamLookahead::propagate_bimp(int lit, std::vector<int>& propagated) {
     return 1;
 }
 
-int BeamLookahead::propagate_big_clauses(std::vector<int>& propagated) {
-    for (int i = 0; i < clause_idx.size() - 1; i++) {
-        int clause_size = clause_idx[i+1] - clause_idx[i];
-        if (clause_size <= 2 || clause_stamp[i] == current_stamp) continue;
-        clause_stamp[i] = current_stamp;
+int BeamLookahead::update_watches_and_propagate(int false_lit, std::vector<int>& propagated, int& queue_rear) {
+    int lit_idx = lit_index(false_lit);
+    std::vector<int>& watches = watch_list[lit_idx];
+    // Process all clauses watching this literal
+    for (size_t i = 0; i < watches.size(); ) {
+        int c_idx = watches[i];
+        int size = clause_idx[c_idx+1] - clause_idx[c_idx];
+        if (size <= 2) { i++; continue; }
+        // Find which watch position contains the false literal
+        int watch_pos = -1;
+        if (clause_literals[clause_idx[c_idx] + watched[c_idx].first] == false_lit) {
+            watch_pos = 0;
+        } else if (clause_literals[clause_idx[c_idx] + watched[c_idx].second] == false_lit) {
+            watch_pos = 1;
+        } else {
+            // This literal is no longer watched, skip
+            i++;
+            continue;
+        }
 
-        int sat = 0, unassigned = 0, last_unassigned = 0;
+        int other_watch_lit;
+        if (watch_pos == 0) {
+            other_watch_lit = clause_literals[clause_idx[c_idx] + watched[c_idx].second];
+        } else {
+            other_watch_lit = clause_literals[clause_idx[c_idx] + watched[c_idx].first];
+        }
 
-        for (int j = 0; j < clause_size; j++) {
-            int lit = clause_literals[clause_idx[i]+j];
-            int var = abs(lit);
-            if (assignments[var] == ASSIGN_NONE) {
-                unassigned++;
-                last_unassigned = lit;
-            } else if ((assignments[var] == ASSIGN_TRUE && lit > 0) ||
-                       (assignments[var] == ASSIGN_FALSE && lit < 0)) {
-                sat = 1;
+        if (is_lit_true(other_watch_lit)) {
+            i++;
+            continue;
+        }
+
+        bool found_new_watch = false;
+        for (int j = 0; j < size; j++) {
+            if (j == watched[c_idx].first || j == watched[c_idx].second) continue;
+            
+            int lit = clause_literals[clause_idx[c_idx] + j];
+            if (!is_lit_false(lit)) {
+                // Found a new literal to watch
+                // Remove from current watch list
+                watches[i] = watches.back();
+                watches.pop_back();
+                
+                // Update watch and add to new watch list
+                if (watch_pos == 0) {
+                    watched[c_idx].first = j;
+                } else {
+                    watched[c_idx].second = j;
+                }
+                watch_list[lit_index(lit)].push_back(c_idx);
+                found_new_watch = true;
                 break;
             }
         }
-
-        if (!sat && unassigned == 0) return 0;
-        if (!sat && unassigned == 1) {
-            int v = abs(last_unassigned);
-            assignments[v] = (last_unassigned > 0) ? ASSIGN_TRUE : ASSIGN_FALSE;
-            propagated.push_back(v);
+        if (!found_new_watch) {
+            // Could not find new watch, check clause status
+            if (is_lit_false(other_watch_lit)) {
+                // Both watches are false - conflict
+                return 0;
+            } else {
+                // Other watch must be unassigned - unit clause
+                int var = abs(other_watch_lit);
+                if (assignments[var] == ASSIGN_NONE) {
+                    assignments[var] = (other_watch_lit > 0) ? ASSIGN_TRUE : ASSIGN_FALSE;
+                    propagated.push_back(var);
+                    global_queue[queue_rear++] = other_watch_lit;
+                }
+            }
+            i++;
         }
     }
     return 1;
@@ -264,11 +321,51 @@ int BeamLookahead::propagate_with_assumptions(const std::vector<int>& assumption
     reset_assignments();
     propagated.clear();
 
+    int front = 0, rear = 0;
+
+    // Add all assumption to the queue
     for (int lit : assumptions) {
-        if (!propagate_bimp(lit, propagated)) return 0;
-        if (!propagate_big_clauses(propagated)) return 0;
+        int var = abs(lit);
+        if (assignments[var] != ASSIGN_NONE) {
+            if ((assignments[var] == ASSIGN_TRUE && lit < 0) ||
+                (assignments[var] == ASSIGN_FALSE && lit > 0)) {
+                return 0;
+            }
+            continue;
+        }
+        assignments[var] = (lit > 0) ? ASSIGN_TRUE : ASSIGN_FALSE;
+        propagated.push_back(var);
+        global_queue[rear++] = lit;
     }
-    if (!propagate_big_clauses(propagated)) return 0;
+
+    while (front < rear) {
+        int lit = global_queue[front++];
+        
+        // Propagate binary implications
+        int idx = lit_index(lit);
+        for (int i = 0; i < bimp_size[idx]; i++) {
+            int implied = bimp[idx][i];
+            int var = abs(implied);
+            
+            if (assignments[var] != ASSIGN_NONE) {
+                if ((assignments[var] == ASSIGN_TRUE && implied < 0) ||
+                    (assignments[var] == ASSIGN_FALSE && implied > 0)) {
+                    return 0;
+                }
+                continue;
+            }
+            
+            assignments[var] = (implied > 0) ? ASSIGN_TRUE : ASSIGN_FALSE;
+            propagated.push_back(var);
+            global_queue[rear++] = implied;
+        }
+        
+        // Update watches for the negation of the assigned literal
+        int false_lit = -lit;
+        if (!update_watches_and_propagate(false_lit, propagated, rear)) {
+            return 0;
+        }
+    }
     return 1;
 }
 
@@ -293,8 +390,8 @@ VarScore BeamLookahead::score_variable_under_base(int var, const std::vector<int
 
 std::vector<VarScore> BeamLookahead::rank_all_vars(int max_var, const std::vector<int>& base_assumptions) {
     int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
     int start_var = rank * (max_var/size);
     int end_var = (rank + 1) * (max_var/size);
     if (rank < max_var % size) {
@@ -304,7 +401,7 @@ std::vector<VarScore> BeamLookahead::rank_all_vars(int max_var, const std::vecto
         start_var += max_var % size;
         end_var += max_var % size;
     }
-    if (end_var > max_var + 1) { end_var = max_var; }
+    if (end_var > max_var + 1) { end_var = max_var + 1; }
 
     std::vector<VarScore> local_out;
     std::vector<VarScore> out;
@@ -315,12 +412,12 @@ std::vector<VarScore> BeamLookahead::rank_all_vars(int max_var, const std::vecto
     int local_count = local_out.size();
     int* counts = new int [size];
     int* offsets = new int [size]();
-    MPI_Allgather(&local_count, 1, MPI_INT, counts, 1, MPI_INT, MPI_COMM_WORLD);
+    MPI_Allgather(&local_count, 1, MPI_INT, counts, 1, MPI_INT, comm);
     for (int i = 1; i < size; i++) {
         offsets[i] = offsets[i-1] + counts[i-1];
     }
     out.resize(offsets[size-1] + counts[size-1]);
-    MPI_Allgatherv(local_out.data(), local_count, MPI_VARSCORE, out.data(), counts, offsets, MPI_VARSCORE, MPI_COMM_WORLD);
+    MPI_Allgatherv(local_out.data(), local_count, MPI_VARSCORE, out.data(), counts, offsets, MPI_VARSCORE, comm);
     std::sort(out.begin(), out.end(), [](const VarScore& a, const VarScore& b) {
         if (a.score != b.score) return a.score > b.score;
         return a.var < b.var;
@@ -339,7 +436,8 @@ struct UpdatedSeedScore {
     double updated_score = 0.0;
 };
 
-void BeamLookahead::setup(int order, const char* infile) {
+void BeamLookahead::setup(int order, const char* infile, MPI_Comm comm) {
+    this->comm = comm;
     m = (order * (order - 1)) / 2;
     parse_cnf(infile);
     if (m == -1 || m > n_vars) m = n_vars;
@@ -406,15 +504,56 @@ void BeamLookahead::lookahead() {
     cubing_var = updated[0].seed_var;
 }
 
+int BeamLookahead::write_cubes(const char* infile, const char* outfile1, const char* outfile2) {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    for (int i = 0; i < (int) bimp.size(); i++) {
+        if (bimp_size[i]) {
+            free(bimp[i]);
+        }
+    }
+    std::fill(bimp.begin(), bimp.end(), (int*) 0);
+    std::fill(bimp_size.begin(), bimp_size.end(), 0);
+    std::fill(bimp_capacity.begin(), bimp_capacity.end(), 0);
+
+    delete[] global_queue;
+    delete[] assignments;
+    delete[] is_unit_var;
+    if (rank == 0) {
+        FILE *in_ptr = fopen(infile, "r");
+        FILE *out1_ptr = fopen(outfile1, "w");
+        FILE *out2_ptr = fopen(outfile2, "w");
+        fscanf(in_ptr, "p cnf %*d %*d\n");
+        fprintf(out1_ptr, "p cnf %d %d\n", n_vars, n_clauses+1);
+        fprintf(out2_ptr, "p cnf %d %d\n", n_vars, n_clauses+1);
+        fprintf(out1_ptr, "%d 0\n", cubing_var);
+        fprintf(out2_ptr, "-%d 0\n", cubing_var);
+        int readlen = 16777216;
+        char buf[readlen];
+        int read = 0;
+        while ((read = fread(buf, 1, readlen, in_ptr)) == readlen){
+            fwrite(buf, 1, readlen, out1_ptr);
+            fwrite(buf, 1, readlen, out2_ptr);
+        }
+        fwrite(buf, 1, read, out1_ptr);
+        fwrite(buf, 1, read, out2_ptr);
+        fclose(in_ptr);
+        fclose(out1_ptr);
+        fclose(out2_ptr);
+    }
+    return 0;
+}
+/*
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
-    int rank, size;
+    int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    auto total_start = std::chrono::high_resolution_clock::now();
     BeamLookahead BL;
     bool debug = false;
     std::string filename;
-    std::string out_file;
+    std::string out_file1;
+    std::string out_file2;
     int m = -1;
 
     MPI_Datatype types[2] = { MPI_INT, MPI_DOUBLE };
@@ -436,8 +575,10 @@ int main(int argc, char** argv) {
         std::string arg = argv[i];
         if (arg == "-m" && i + 1 < argc) {
             m = atoi(argv[++i]);
-        } else if (arg == "-o" && i + 1 < argc) {
-            out_file = argv[++i];
+        } else if (arg == "-o1" && i + 1 < argc) {
+            out_file1 = argv[++i];
+        } else if (arg == "-o2" && i + 1 < argc) {
+            out_file2 = argv[++i];
         } else if (arg == "-debug") {
             debug = true;
         } else if (!arg.empty() && arg[0] != '-') {
@@ -445,7 +586,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (filename.empty() || out_file.empty()) {
+    if (filename.empty() || out_file1.empty() || out_file2.empty()) {
         if (rank == 0) {
             printf("Usage: %s <cnf-file> -o <cube-file> [-m M] [-debug]\n", argv[0]);
         }
@@ -454,8 +595,9 @@ int main(int argc, char** argv) {
     }
 
     auto time_start = std::chrono::high_resolution_clock::now();
-    BL.setup(m, filename.c_str());
+    BL.setup(m, filename.c_str(), MPI_COMM_WORLD);
     BL.lookahead();
+    BL.write_cubes(filename.c_str(), out_file1.c_str(), out_file2.c_str());
     double total_time = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - time_start).count();
 
     if (rank == 0) { printf("Total runtime: %.3f\n", total_time); }
@@ -463,5 +605,4 @@ int main(int argc, char** argv) {
 
     MPI_Finalize();
     return 0;
-}
-
+}*/

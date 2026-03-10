@@ -26,19 +26,20 @@ long muscount = 0;
 long muscounts[17] = {};
 double mustime = 0;
 
-SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc) : solver(s) {
+SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, char * sol_file) : solver(s) {
     if (order == 0) {
-        std::cout << "c Need to provide order to use programmatic code" << std::endl;
+        //std::cout << "c Need to provide order to use programmatic code" << std::endl;
         return;
     }
     if (uc == 0) {
-        std::cout << "c Not checking for unembeddable subgraphs" << std::endl;
+        //std::cout << "c Not checking for unembeddable subgraphs" << std::endl;
     } else {
-        std::cout << "c Checking for " << uc << " unembeddable subgraphs" << std::endl;
+        //std::cout << "c Checking for " << uc << " unembeddable subgraphs" << std::endl;
     }
     n = order;
     num_edge_vars = n*(n-1)/2;
     unembeddable_check = uc;
+    //this->sol_file = std::string(sol_file);
     assign = new int[num_edge_vars];
     fixed = new bool[num_edge_vars];
     colsuntouched = new int[n];
@@ -47,7 +48,7 @@ SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc) : solve
         assign[i] = l_Undef;
         fixed[i] = false;
     }
-    std::cout << "c Running orderly generation on order " << n << " (" << num_edge_vars << " edge variables)" << std::endl;
+    //std::cout << "c Running orderly generation on order " << n << " (" << num_edge_vars << " edge variables)" << std::endl;
     // The root-level of the trail is always there
     current_trail.push_back(std::vector<int>());
     // Observe the edge variables for orderly generation
@@ -125,21 +126,15 @@ bool SymmetryBreaker::cb_check_found_model (const std::vector<int> & model) {
     assert(model.size() == num_edge_vars);
     sol_count += 1;
 
-#ifdef VERBOSE
-    std::cout << "c New solution was found: ";
-#endif
+    //std::cout << "New solution was found: ";
     std::vector<int> clause;
     for (const auto& lit: model) {
-#ifdef VERBOSE
-        if (lit > 0) {
-            std::cout << lit << " ";
-        }
-#endif
+        //if (lit > 0) {
+        //    std::cout << lit << " ";
+        //}
         clause.push_back(-lit);
     }
-#ifdef VERBOSE
-    std::cout << std::endl;
-#endif
+    //std::cout << std::endl;
     new_clauses.push_back(clause);
     //TODO add back DRAT proof
 	//solver->add_trusted_clause(clause);
