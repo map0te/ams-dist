@@ -34,7 +34,7 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
 
         //int split();
         int simplify();
-        //int solve(bool interruptable);
+        int solve();
         void format_res(int res);
 
         void write_file();
@@ -49,19 +49,15 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
         void catch_alarm () { timesup = true; };
 
         /*--------- Message Handler ----------*/
-        MPI_Request interrupt_req, progress_req; 
-        //void isend_active();
-        //void send_cubes(int count);
         int recv_task();
         void send_simplify_result(int res);
 
         /*--------- Worker ----------*/
         int state, rank;
         double start_ts;
-        Worker(int order, const char* top_name) {
+        Worker(InstanceInfo& instance) {
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-            instance.order = order;
-            instance.top_name = top_name;
+            this->instance = instance;
             solver = 0;
             counter = 0; 
             state = 0;

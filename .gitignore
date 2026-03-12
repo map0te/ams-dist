@@ -3,3 +3,4 @@ simple_mcts
 beam_lookahead
 ams-dist
 *.out
+*.o

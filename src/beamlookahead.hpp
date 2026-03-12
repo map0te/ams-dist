@@ -5,18 +5,13 @@
 #include <queue>
 #include <mpi.h>
 
+#include "def.hpp"
+
 #define HEADER_BUF 1024
 #define BIMP_GROW_CHUNK 4
 #define ASSIGN_NONE 0
 #define ASSIGN_TRUE 1
 #define ASSIGN_FALSE 2
-
-struct VarScore {
-    int var = 0;
-    int pos = 0;
-    int neg = 0;
-    double score = 0.0;
-};
 
 class BeamLookahead {
 private:

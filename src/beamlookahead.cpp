@@ -69,6 +69,9 @@ void BeamLookahead::parse_cnf(const char *filename) {
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
 
+    watched.clear();
+    watch_list.clear();
+
     err = MPI_File_open(comm, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     if (err) {
         MPI_Abort(MPI_COMM_WORLD, 1);

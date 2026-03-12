@@ -1,6 +1,7 @@
 #ifndef DEFHPP
 #define DEFHPP
 
+#include <string>
 #include <mpi.h>
 
 #define ROOT 0
@@ -25,6 +26,7 @@ enum TASK_TYPE {
 	DCUBE,
 	SIMPLIFY,
 	SOLVE,
+	SOLVE_NOINT,
 	END
 };
 
@@ -51,11 +53,6 @@ enum MESSAGE_TYPE {
 	M_CUBEINFO,
 };
 
-struct InstanceInfo {
-	int order;
-	const char *top_name;
-};
-
 struct CubeInfo {
 	int active;
 	int status;
@@ -67,6 +64,52 @@ struct CubeInfo {
 struct TaskInfo {
 	int type;
 	int n_cubeinfo;
+};
+
+struct VarScore {
+    int var = 0;
+    int pos = 0;
+    int neg = 0;
+    double score = 0.0;
+};
+
+inline void init_cubeinfo_type(MPI_Datatype& mpi_type) {
+	MPI_Datatype types[3] = { MPI_INT, MPI_LONG, MPI_CHAR };
+    int blocklen[3] = {2, 1, MAXIDLENGTH};
+    MPI_Aint offsets[3];
+	offsets[0] = offsetof(struct CubeInfo, active);
+    offsets[1] = offsetof(struct CubeInfo, n_solutions);
+    offsets[2] = offsetof(struct CubeInfo, id);
+	MPI_Type_create_struct(3, blocklen, offsets, types, &mpi_type);
+    MPI_Type_commit(&mpi_type);
+}
+
+inline void init_taskinfo_type(MPI_Datatype& mpi_type) {
+	MPI_Datatype types[1] = { MPI_INT };
+	int blocklen[1] = {2};
+	MPI_Aint offsets[1];
+	offsets[0] = offsetof(struct TaskInfo, type);
+	MPI_Type_create_struct(1, blocklen, offsets, types, &mpi_type);
+	MPI_Type_commit(&mpi_type);
+}
+
+inline void init_varscore_type(MPI_Datatype& mpi_type) {
+	MPI_Datatype types[2] = { MPI_INT, MPI_DOUBLE };
+	int blocklen[2] = {3, 1};
+	MPI_Aint offsets[2];
+	offsets[0] = offsetof(struct VarScore, var);
+	offsets[1] = offsetof(struct VarScore, score);
+	MPI_Type_create_struct(2, blocklen, offsets, types, &mpi_type);
+	MPI_Type_commit(&mpi_type);
+}
+
+struct InstanceInfo {
+	int order;
+	int inprobing;
+	int cutoff_v;
+	bool aggressive;
+	std::string top_name;
+	std::string solution_file_name;
 };
 
 #endif

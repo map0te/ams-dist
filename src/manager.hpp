@@ -34,18 +34,21 @@ public:
 private:
     int n_proc, n_workers;
     int n_cubing, n_solving, n_simplifying, n_terminated;
+    long n_solutions = 0;
 
     InstanceInfo instance;
     BeamLookahead beamlookahead;
     //StatusTracker status_tracker;
     std::queue<CubeInfo> simplify_queue;
     std::vector<CubeInfo> cube_queue;
-    std::queue<CubeInfo> solve_queue;
+    std::vector<CubeInfo> solve_queue;
     std::queue<int> idle_workers;
     std::vector<WorkerInfo> worker_info;
 
-    void send_simplify_task(int rank, CubeInfo& cube);
-    int recv_simplify_task(int &rank, CubeInfo new_cubes[]);
+    void send_simplify_task();
+    int recv_simplify_task();
+    void send_solve_task(int rank, CubeInfo& cube, bool interruptable);
+    int recv_solve_task(CubeInfo new_cubes[]);
     void bcast_dcube_task();
     void recv_dcube_task(int ntasks, CubeInfo new_cubes[]);
     void send_interrupt(int worker);

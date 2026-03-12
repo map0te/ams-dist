@@ -35,6 +35,17 @@ int Worker::recv_task() {
         simplify();
         return 1;
     }
+    if (task.type == SOLVE_NOINT) {
+        MPI_Recv(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        cube = cubes.front();
+        if (!std::strcmp(cube.id, "")) {
+            current_instance = std::string(instance.top_name);
+        } else {
+            current_instance = std::string(instance.top_name) + "." + std::string(cube.id) + ".cnf";
+        }
+        solve();
+        return 1;
+    } 
     if (task.type == DCUBE) {
         MPI_Bcast(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, MPI_COMM_WORLD);
         cube = cubes[rank % task.n_cubeinfo];
@@ -91,17 +102,36 @@ void Worker::format_res(int res) {
     fflush(stdout);
 }
 
+int Worker::solve() {
+    solver = new CaDiCaL::Solver ();
+    solver->set("quiet", 1);
+    solver->set("preprocesslight", false);
+    solver->set("factor", false);
+    solver->set("factorunbump", false);
+
+    read_file(current_instance.c_str());
+    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, 0);
+    res = solver->solve ();
+    cube.active = solver->active();
+    cube.n_solutions = se->n_sol();
+    if (res == 0) { write_file(); cube.status = UNKNOWN;} else { cube.status = UNSAT; }
+    send_simplify_result(res);
+    delete se;
+    delete solver;
+    solver = 0;
+    return res;
+}
+
 int Worker::simplify() {
     // setup solver
     solver = new CaDiCaL::Solver ();
     solver->limit ("conflicts", SIMPLIMIT);
     solver->set("quiet", 1);
-    
-    //solver->set("inprobeint", 100);
-    //solver->set("probeeffort", 20);
+
     solver->set("factor", false);
     solver->set("factorunbump", false);
     solver->set("preprocesslight", false);
+    //solver->set("inprobing", false);
     if (strcmp(cube.id, "")) { solver->set("inprobing", false); }
     //solver->set("inprocessing", false);
 
@@ -114,7 +144,6 @@ int Worker::simplify() {
     cube.n_solutions = se->n_sol();
     if (res == 0) { write_file(); cube.status = UNKNOWN;} else { cube.status = UNSAT; }
     send_simplify_result(res);
-    //format_res(res);
     delete se;
     delete solver;
     solver = 0;
