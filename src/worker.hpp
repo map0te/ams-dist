@@ -1,6 +1,8 @@
 #ifndef WORKER_HPP
 #define WORKER_HPP
 
+#include <chrono>
+
 #include <mpi.h>
 
 #include "beamlookahead.hpp"
@@ -33,16 +35,17 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
         bool set(const char *arg) { return solver->set_long_option (arg); };
 
         //int split();
+        int solve(bool interruptable);
         int simplify();
-        int solve();
+        int scube();
+        int dcube();
         void format_res(int res);
 
-        void write_file();
+        void write_file(bool temp);
         void read_file(std::string name);
 
         /*--------- Terminator ----------*/
         int counter;
-        int progress;
         bool p_flag;
         bool terminate ();
         void catch_signal (int sig) { return; };
@@ -54,7 +57,7 @@ class Worker : public CaDiCaL::Terminator, public CaDiCaL::Handler {
 
         /*--------- Worker ----------*/
         int state, rank;
-        double start_ts;
+        std::chrono::steady_clock::time_point start_time;
         Worker(InstanceInfo& instance) {
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
             this->instance = instance;

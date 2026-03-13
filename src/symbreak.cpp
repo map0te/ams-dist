@@ -123,18 +123,18 @@ void SymmetryBreaker::notify_backtrack (size_t new_level) {
 }
 
 bool SymmetryBreaker::cb_check_found_model (const std::vector<int> & model) {
-    assert(model.size() == num_edge_vars);
+    assert((int) model.size() == num_edge_vars);
     sol_count += 1;
 
-    //std::cout << "New solution was found: ";
+    std::cout << "New solution was found: ";
     std::vector<int> clause;
     for (const auto& lit: model) {
-        //if (lit > 0) {
-        //    std::cout << lit << " ";
-        //}
+        if (lit > 0) {
+            std::cout << lit << " ";
+        }
         clause.push_back(-lit);
     }
-    //std::cout << std::endl;
+    std::cout << std::endl;
     new_clauses.push_back(clause);
     //TODO add back DRAT proof
 	//solver->add_trusted_clause(clause);

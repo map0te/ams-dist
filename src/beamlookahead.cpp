@@ -164,7 +164,7 @@ void BeamLookahead::parse_cnf(const char *filename) {
         clause_literals.data(), literals_read, literals_read_offsets, MPI_INT, comm);
 
     // Add offset to clause idx
-    for (int i = 0; i < local_clause_idx.size(); i++) {
+    for (size_t i = 0; i < local_clause_idx.size(); i++) {
         local_clause_idx[i] += literals_read_offsets[rank];
     }
 
@@ -206,7 +206,7 @@ void BeamLookahead::parse_cnf(const char *filename) {
     assignments = new uint8_t [n_vars + 1]();
     is_unit_var = new uint8_t [n_vars + 1]();
 
-    for (int i = 1; i < clause_idx.size(); i++) {
+    for (size_t i = 1; i < clause_idx.size(); i++) {
         if (clause_idx[i] - clause_idx[i-1] == 1) {
             is_unit_var[abs(clause_literals[clause_idx[i-1]])] = 1;
         } else if (clause_idx[i] - clause_idx[i-1] == 2) {

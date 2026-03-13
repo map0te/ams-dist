@@ -4,17 +4,8 @@
 #include <string>
 #include <mpi.h>
 
-#define ROOT 0
-
-#define NUMSKIP 100
-#define WARMUP 30
-
 #define MAXIDLENGTH 512
-
 #define SIMPLIMIT 10000
-#define PROOFSIZE 7168
-#define TIMELIMIT 7200
-#define NUMMCTS 100
 
 // MPI struct datatypes
 extern MPI_Datatype MPI_CUBEINFO;
@@ -46,7 +37,7 @@ enum CUBE_STATE {
 };
 
 enum MESSAGE_TYPE { 
-	M_PROGRESS,
+	M_ACTIVE,
 	M_INTERRUPT,
 	M_TASKINFO,
 	M_NUMCUBE,
@@ -107,6 +98,7 @@ struct InstanceInfo {
 	int order;
 	int inprobing;
 	int cutoff_v;
+	int twarmup;
 	bool aggressive;
 	std::string top_name;
 	std::string solution_file_name;
