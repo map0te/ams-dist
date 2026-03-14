@@ -10,6 +10,8 @@ Authors: Piyush Jha, Zhengyu Li, Maxim Zhulin
 Compile with Make. Requires MPI.
 
 ```bash
+git clone --recursive https://github.com/map0te/ams-dist.git
+cd ams-dist
 make
 ```
 
