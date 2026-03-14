@@ -26,15 +26,15 @@ class SymmetryBreaker : CaDiCaL::ExternalPropagator {
     int num_edge_vars = 0;
     std::set<unsigned long> canonical_hashes[MAXORDER];
     std::set<unsigned long> solution_hashes;
-    std::string sol_file;
+    const char* outfile;
 public:
-    SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, char * sol_file);
+    SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, const char* outfile);
     ~SymmetryBreaker ();
-    void notify_assignment(const std::vector<int> &lits);
+    void notify_assignment(int lit, bool is_fixed);
     void notify_new_decision_level ();
     void notify_backtrack (size_t new_level);
     bool cb_check_found_model (const std::vector<int> & model);
-    bool cb_has_external_clause (bool &is_forgettable);
+    bool cb_has_external_clause ();
     int cb_add_external_clause_lit ();
     int cb_decide ();
     int cb_propagate ();

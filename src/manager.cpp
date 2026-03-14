@@ -1,5 +1,6 @@
 #include <cassert>
 #include <chrono>
+#include <filesystem>
 
 #include "def.hpp"
 #include "manager.hpp"
@@ -146,6 +147,7 @@ void Manager::exec_dcube_task() {
     strcpy(c[1].id, c2id.c_str());
     simplify_queue.push(c[0]);
     simplify_queue.push(c[1]);
+    std::filesystem::remove(current_instance);
 }
 
 void Manager::recv_dcube_task(int ntasks, CubeInfo new_cubes[]) {
@@ -220,6 +222,8 @@ void Manager::start() {
     CubeInfo new_cubes[2];
     int cube_s = 0;
     int simp_s = 0;
+
+    bool printflag = false;
 
     // ------- Distributed Cubing ------- //
     while ( !simplify_queue.empty() ) {
@@ -299,11 +303,21 @@ void Manager::start() {
                 }
             }
         }
-        if (prev_n_solving != n_solving) {
+        if (prev_n_solving != n_solving && instance.verbose) {
             print_time();
             printf("Active solvers: %d/%d\n", n_solving, n_workers);
             fflush(stdout);
         }
+        auto end_time = std::chrono::steady_clock::now();
+        std::chrono::duration<double> duration = end_time - start_time;
+        auto total_seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+        if (!printflag && !instance.verbose && (total_seconds % 60 == 0)) {
+            print_time();
+            printf("Active solvers: %d/%d\n", n_solving, n_workers);
+            fflush(stdout);
+            printflag = true;
+        }
+        if (total_seconds % 60 == 1) { printflag = false; }
         prev_n_solving = n_solving;
     }
 

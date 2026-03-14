@@ -79,12 +79,8 @@ int Worker::solve(bool interruptable) {
     solver = new CaDiCaL::Solver ();
     solver->set("quiet", 1);
 
-    solver->set("preprocesslight", false);
-    solver->set("factor", false);
-    solver->set("factorunbump", false);
-
     read_file(current_instance.c_str());
-    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, 0);
+    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, instance.solution_file_name);
     if (interruptable) solver->connect_terminator(this);
 
     res = solver->solve ();
@@ -118,6 +114,8 @@ int Worker::solve(bool interruptable) {
         MPI_Recv(NULL, 0, MPI_INT, 0, M_INTERRUPT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
+    std::filesystem::remove(current_instance);
+
     delete se;
     delete solver;
     solver = 0;
@@ -130,17 +128,8 @@ int Worker::simplify() {
     solver->limit ("conflicts", SIMPLIMIT);
     solver->set("quiet", 1);
 
-    solver->set("factor", false);
-    solver->set("factorunbump", false);
-    solver->set("preprocesslight", false);
-    if (instance.inprobing == 0) {
-        solver->set("inprobing", false);
-    } else if (instance.inprobing == 1) {
-        if (strcmp(cube.id, "")) { solver->set("inprobing", false); }
-    }
-
     read_file(current_instance.c_str());
-    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, 0);
+    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, instance.solution_file_name);
 
     res = solver->solve ();
     cube.active = solver->active();
@@ -153,6 +142,8 @@ int Worker::simplify() {
         cube.status = UNSAT; 
     }
     send_simplify_result(res);
+
+    std::filesystem::remove(current_instance);
 
     delete se;
     delete solver;
@@ -168,6 +159,7 @@ int Worker::scube() {
     beamlookahead.setup(instance.order, infile.c_str(), comm);
     beamlookahead.lookahead();
     beamlookahead.write_cubes(infile.c_str(), out1.c_str(), out2.c_str());
+    std::filesystem::remove(infile);
     return 0;
 }
 
@@ -191,6 +183,7 @@ int Worker::dcube() {
         strcpy(c[1].id, c2id.c_str());
         MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
         MPI_Send(c, ncube, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD);
+        std::filesystem::remove(current_instance);
     }
     return 0;
 }

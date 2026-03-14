@@ -100,8 +100,9 @@ struct InstanceInfo {
 	int cutoff_v;
 	int twarmup;
 	bool aggressive;
+	bool verbose;
 	std::string top_name;
-	std::string solution_file_name;
+	const char* solution_file_name;
 };
 
 #endif

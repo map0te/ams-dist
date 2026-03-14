@@ -4,23 +4,30 @@ CFLAGS = -O3 -Wall -Icadical/src
 all: ams-dist
 
 clean:
-	rm -f src/*.o
+	cd cadical; make clean; cd ..
+	rm -rf build
 	rm -f ams-dist
 
-src/beamlookahead.o: src/beamlookahead.cpp
-	$(CC) $(CFLAGS) -c src/beamlookahead.cpp -o src/beamlookahead.o
+build:
+	mkdir -p build
 
-src/symbreak.o:	src/symbreak.cpp
-	$(CC) $(CFLAGS) -c src/symbreak.cpp -o src/symbreak.o
+build/beamlookahead.o: src/beamlookahead.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/beamlookahead.cpp -o build/beamlookahead.o
 
-src/worker.o: src/worker.cpp
-	$(CC) $(CFLAGS) -c src/worker.cpp -o src/worker.o
+build/symbreak.o: src/symbreak.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/symbreak.cpp -o build/symbreak.o
 
-src/manager.o: src/manager.cpp
-	$(CC) $(CFLAGS) -c src/manager.cpp -o src/manager.o
+build/worker.o: src/worker.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/worker.cpp -o build/worker.o
 
-src/statustracker.o: src/statustracker.cpp
-	$(CC) $(CFLAGS) -c src/statustracker.cpp -o src/statustracker.o
+build/manager.o: src/manager.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/manager.cpp -o build/manager.o
 
-ams-dist: src/beamlookahead.o src/symbreak.o src/worker.o src/manager.o src/statustracker.o src/main.cpp
-	$(CC) $(CFLAGS) cadical/build/*.o src/*.o src/main.cpp -o ams-dist
+build/statustracker.o: src/statustracker.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/statustracker.cpp -o build/statustracker.o
+
+cadical/build/libcadical.a: cadical/src/*.cpp
+	cd cadical; ./configure && make; cd ..
+
+ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/worker.o build/manager.o build/statustracker.o src/main.cpp
+	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist -Lcadical/build -lcadical

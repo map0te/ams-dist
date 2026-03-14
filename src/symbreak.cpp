@@ -26,20 +26,15 @@ long muscount = 0;
 long muscounts[17] = {};
 double mustime = 0;
 
-SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, char * sol_file) : solver(s) {
+SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, const char* outfile) : solver(s) {
     if (order == 0) {
-        //std::cout << "c Need to provide order to use programmatic code" << std::endl;
+        std::cout << "c Need to provide order to use programmatic code" << std::endl;
         return;
     }
-    if (uc == 0) {
-        //std::cout << "c Not checking for unembeddable subgraphs" << std::endl;
-    } else {
-        //std::cout << "c Checking for " << uc << " unembeddable subgraphs" << std::endl;
-    }
+    this->outfile = outfile;
     n = order;
     num_edge_vars = n*(n-1)/2;
     unembeddable_check = uc;
-    //this->sol_file = std::string(sol_file);
     assign = new int[num_edge_vars];
     fixed = new bool[num_edge_vars];
     colsuntouched = new int[n];
@@ -63,42 +58,15 @@ SymmetryBreaker::~SymmetryBreaker () {
         delete [] assign;
         delete [] colsuntouched;
         delete [] fixed;
-        /*
-        printf("Number of solutions   : %ld\n", sol_count);
-        printf("Canonical subgraphs   : %-12" PRIu64 "   (%.0f /sec)\n", canon, canon/canontime);
-        for(int i=2; i<n; i++) {
-#ifdef PERM_STATS
-            printf("          order %2d    : %-12" PRIu64 "   (%.0f /sec) %.0f avg. perms\n", i+1, canonarr[i], canonarr[i]/canontimearr[i], canon_np[i]/(float)(canonarr[i] > 0 ? canonarr[i] : 1));
-#else
-            printf("          order %2d    : %-12" PRIu64 "   (%.0f /sec)\n", i+1, canonarr[i], canonarr[i]/canontimearr[i]);
-#endif
-        }
-        printf("Noncanonical subgraphs: %-12" PRIu64 "   (%.0f /sec)\n", noncanon, noncanon/noncanontime);
-        for(int i=2; i<n; i++) {
-#ifdef PERM_STATS
-            printf("          order %2d    : %-12" PRIu64 "   (%.0f /sec) %.0f avg. perms\n", i+1, noncanonarr[i], noncanonarr[i]/noncanontimearr[i], noncanon_np[i]/(float)(noncanonarr[i] > 0 ? noncanonarr[i] : 1));
-#else
-            printf("          order %2d    : %-12" PRIu64 "   (%.0f /sec)\n", i+1, noncanonarr[i], noncanonarr[i]/noncanontimearr[i]);
-#endif
-        }
-        printf("Canonicity checking   : %g s\n", canontime);
-        printf("Noncanonicity checking: %g s\n", noncanontime);
-        printf("Total canonicity time : %g s\n", canontime+noncanontime);
-        if (unembeddable_check > 0) {
-            printf("Unembeddable checking : %g s\n", mustime);
-            for(int g=0; g<unembeddable_check; g++) {
-                printf("        graph #%2d     : %-12" PRIu64 "\n", g, muscounts[g]);
-            }
-            printf("Total unembed. graphs : %ld\n", muscount);
-        }
-        */
     }
 }
 
-void SymmetryBreaker::notify_assignment(const std::vector<int> &lits) {
-	for (auto lit : lits) {
-    	assign[abs(lit)-1] = (lit > 0 ? l_True : l_False);
-    	current_trail.back().push_back(lit);
+void SymmetryBreaker::notify_assignment(int lit, bool is_fixed) {
+    assign[abs(lit)-1] = (lit > 0 ? l_True : l_False);
+    if (is_fixed) {
+        fixed[abs(lit)-1] = true;
+    } else {
+        current_trail.back().push_back(lit);
     }
 }
 
@@ -126,24 +94,34 @@ bool SymmetryBreaker::cb_check_found_model (const std::vector<int> & model) {
     assert((int) model.size() == num_edge_vars);
     sol_count += 1;
 
-    std::cout << "New solution was found: ";
+    FILE *fptr = 0;
+    if (outfile != 0) {
+        fptr = fopen(outfile, "a");
+    }
     std::vector<int> clause;
     for (const auto& lit: model) {
         if (lit > 0) {
-            std::cout << lit << " ";
+            if (outfile != 0) {
+                fprintf(fptr, "%d ", lit);
+            } else {
+                std::cout << lit << " ";
+            }
         }
         clause.push_back(-lit);
     }
-    std::cout << std::endl;
+    if (fptr != 0) {
+        fprintf(fptr, "\n");
+        fclose(fptr);
+    } else {
+        std::cout << std::endl;
+    }
     new_clauses.push_back(clause);
-    //TODO add back DRAT proof
-	//solver->add_trusted_clause(clause);
+    //solver->add_trusted_clause(clause);
 
     return false;
 }
 
-bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
-	is_forgettable = false;
+bool SymmetryBreaker::cb_has_external_clause () {
     if(!new_clauses.empty())
         return true;
 
@@ -276,8 +254,7 @@ bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
                 // To generate the naive blocking clause:
                 /*for(int j = 0; j < i*(i+1)/2; j++)
                     new_clauses.back().push_back((j+1) * assign[j]==l_True ? -1 : 1);*/
-                //TODO add back DRAT proof
-				//solver->add_trusted_clause(new_clauses.back());
+                //solver->add_trusted_clause(new_clauses.back());
 
                 if(noncanonicaloutfile != NULL) {
                     //fprintf(noncanonicaloutfile, "a ");
@@ -287,15 +264,14 @@ bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
                     fprintf(noncanonicaloutfile, "0\n");
                     fflush(noncanonicaloutfile);
                 }
-				/*
-                if(solver->permoutfile != NULL) {
+
+                /*if(solver->permoutfile != NULL) {
                     for(int j = 0; j <= mi; j++)
                         fprintf(solver->permoutfile, "%s%d", j == 0 ? "" : " ", p[j]);
                     fprintf(solver->permoutfile, "\n");
-                }
+                }*/
 
                 return true;
-				*/
             }
         }
     }
@@ -338,8 +314,7 @@ bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
 #ifdef VERBOSE
             std::cout << std::endl;
 #endif
-            //TODO add back DRAT proog
-			//solver->add_trusted_clause(new_clauses.back());
+            //solver->add_trusted_clause(new_clauses.back());
 
             if(musoutfile != NULL) {
                 //fprintf(musoutfile, "a ");
@@ -357,8 +332,7 @@ bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
                 fflush(musoutfile);
             }
 
-            /*
-			if(solver->permoutfile != NULL) {
+            /*if(solver->permoutfile != NULL) {
                 fprintf(solver->permoutfile, "Minimal unembeddable subgraph %d:", g);
                 int mii = 10;
                 if(g >= 2 && g < 7)
@@ -369,8 +343,7 @@ bool SymmetryBreaker::cb_has_external_clause (bool &is_forgettable) {
                     fprintf(solver->permoutfile, "%s%d", ii == 0 ? "" : " ", p[ii]);
                 }
                 fprintf(solver->permoutfile, "\n");
-            }
-			*/
+            }*/
             return true;
         }
     }
