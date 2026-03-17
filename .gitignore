@@ -5,3 +5,4 @@ ams-dist
 *.out
 *.o
 build
+run_scripts
