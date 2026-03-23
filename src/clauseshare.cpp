@@ -1,7 +1,7 @@
 #include <iostream>
 #include "clauseshare.hpp"
-#include "unembeddable_graphs.h"
-#include "hash_values.h"
+#include "unembeddable_graphs.hpp"
+#include "hash_values.hpp"
 
 #include <mpi.h>
 

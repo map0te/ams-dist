@@ -1,7 +1,7 @@
 #include "symbreak.hpp"
 #include <iostream>
-#include "unembeddable_graphs.h"
-#include "hash_values.h"
+#include "unembeddable_graphs.hpp"
+#include "hash_values.hpp"
 
 static FILE * canonicaloutfile = NULL;
 static FILE * noncanonicaloutfile = NULL;
