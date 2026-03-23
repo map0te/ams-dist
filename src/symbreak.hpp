@@ -11,7 +11,7 @@
 #define MAX(X,Y) ((X) > (Y)) ? (X) : (Y)
 #define MIN(X,Y) ((X) > (Y)) ? (Y) : (X)
 
-const int MAXORDER = 40;
+#define MAXORDER 40
 
 class SymmetryBreaker : CaDiCaL::ExternalPropagator {
     CaDiCaL::Solver * solver;

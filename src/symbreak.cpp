@@ -3,28 +3,28 @@
 #include "unembeddable_graphs.h"
 #include "hash_values.h"
 
-FILE * canonicaloutfile = NULL;
-FILE * noncanonicaloutfile = NULL;
-FILE * exhaustfile = NULL;
-FILE * musoutfile = NULL;
+static FILE * canonicaloutfile = NULL;
+static FILE * noncanonicaloutfile = NULL;
+static FILE * exhaustfile = NULL;
+static FILE * musoutfile = NULL;
 
 // The kth entry estimates the number of permuations needed to show canonicity in order (k+1)
-long perm_cutoff[MAXORDER] = {0, 0, 0, 0, 0, 0, 20, 50, 125, 313, 783, 1958, 4895, 12238, 30595, 76488, 191220, 478050, 1195125, 2987813, 7469533, 18673833, 46684583};
-long canon = 0;
-long noncanon = 0;
-double canontime = 0;
-double noncanontime = 0;
-long canonarr[MAXORDER] = {};
-long noncanonarr[MAXORDER] = {};
-double canontimearr[MAXORDER] = {};
-double noncanontimearr[MAXORDER] = {};
+static long perm_cutoff[MAXORDER] = {0, 0, 0, 0, 0, 0, 20, 50, 125, 313, 783, 1958, 4895, 12238, 30595, 76488, 191220, 478050, 1195125, 2987813, 7469533, 18673833, 46684583};
+static long canon = 0;
+static long noncanon = 0;
+static double canontime = 0;
+static double noncanontime = 0;
+static long canonarr[MAXORDER] = {};
+static long noncanonarr[MAXORDER] = {};
+static double canontimearr[MAXORDER] = {};
+static double noncanontimearr[MAXORDER] = {};
 #ifdef PERM_STATS
-long canon_np[MAXORDER] = {};
-long noncanon_np[MAXORDER] = {};
+static long canon_np[MAXORDER] = {};
+static long noncanon_np[MAXORDER] = {};
 #endif
-long muscount = 0;
-long muscounts[17] = {};
-double mustime = 0;
+static long muscount = 0;
+static long muscounts[17] = {};
+static double mustime = 0;
 
 SymmetryBreaker::SymmetryBreaker(CaDiCaL::Solver * s, int order, int uc, const char* outfile) : solver(s) {
     if (order == 0) {
@@ -353,7 +353,10 @@ bool SymmetryBreaker::cb_has_external_clause () {
 }
 
 int SymmetryBreaker::cb_add_external_clause_lit () {
-    if (new_clauses.empty()) return 0;
+    if (new_clauses.empty()) {
+        printf("here\n");
+        return 0;
+    }
     else {
         assert(!new_clauses.empty());
         size_t clause_idx = new_clauses.size() - 1;
