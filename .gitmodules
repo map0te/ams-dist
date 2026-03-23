@@ -2,3 +2,7 @@
 	path = cadical
 	url = https://github.com/map0te/cadical
 	branch = ams-dist
+[submodule "gen_instance"]
+	path = gen_instance
+	url = https://github.com/map0te/gen_instance.git
+	branch = main
