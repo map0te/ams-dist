@@ -17,6 +17,9 @@ build/beamlookahead.o: src/beamlookahead.cpp | build
 build/symbreak.o: src/symbreak.cpp | build
 	$(MAKEDIR) $(CC) $(CFLAGS) -c src/symbreak.cpp -o build/symbreak.o
 
+build/propagator.o: src/propagator.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/propagator.cpp -o build/propagator.o
+
 build/worker.o: src/worker.cpp | build
 	$(MAKEDIR) $(CC) $(CFLAGS) -c src/worker.cpp -o build/worker.o
 
@@ -29,5 +32,5 @@ build/statustracker.o: src/statustracker.cpp | build
 cadical/build/libcadical.a: cadical/src/*.cpp
 	cd cadical; ./configure && make; cd ..
 
-ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/worker.o build/manager.o build/statustracker.o src/main.cpp
+ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/worker.o build/manager.o build/statustracker.o build/propagator.o src/main.cpp
 	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist -Lcadical/build -lcadical

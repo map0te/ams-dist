@@ -23,12 +23,13 @@ int main(int argc, char** argv) {
             s.phase(i);
         }
     }
-    s.limit("conflicts", 1000);
+    cs->set_timeout(20);
     int res = s.solve();
     int multiplier = 1;
-    while (multiplier < 7) {
+    while (multiplier < 60) {
+        if (!rank) { printf("sharing\n"); fflush(stdout); };
         cs->share();
-        s.limit("conflicts", 1000 * multiplier);
+        cs->set_timeout(20);
         res = s.solve();
         multiplier++;
     }

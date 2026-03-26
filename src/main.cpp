@@ -32,7 +32,8 @@ int main(int argc, char **argv) {
         {"help", no_argument, 0, 'h'},
         {"solfile", required_argument, 0, 's'},
         {"aggressive", no_argument, 0, 'a'},
-        {"twarmup", required_argument, 0, 't'}
+        {"twarmup", required_argument, 0, 't'},
+        {0, 0, 0, 0}
     };
 
     InstanceInfo instance;

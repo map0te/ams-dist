@@ -7,7 +7,7 @@
 #include "signal.hpp"
 
 #include "def.hpp"
-#include "symbreak.hpp"
+#include "propagator.hpp"
 #include "worker.hpp"
 
 void Worker::read_file(std::string name) {
@@ -80,12 +80,13 @@ int Worker::solve(bool interruptable) {
     solver->set("quiet", 1);
 
     read_file(current_instance.c_str());
-    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, instance.solution_file_name);
+    Propagator* propagator = new Propagator(instance, solver);
+    propagator->connect();
     if (interruptable) solver->connect_terminator(this);
 
     res = solver->solve ();
     cube.active = solver->active();
-    cube.n_solutions = se->n_sol();
+    cube.n_solutions = propagator->n_solutions();
 
     if (res == 0) { 
         write_file(true); 
@@ -115,8 +116,9 @@ int Worker::solve(bool interruptable) {
     }
 
     std::filesystem::remove(current_instance);
+    propagator->disconnect();
 
-    delete se;
+    delete propagator;
     delete solver;
     solver = 0;
     return res;
@@ -129,11 +131,12 @@ int Worker::simplify() {
     solver->set("quiet", 1);
 
     read_file(current_instance.c_str());
-    SymmetryBreaker* se = new SymmetryBreaker(solver, instance.order, 0, instance.solution_file_name);
+    Propagator* propagator = new Propagator(instance, solver);
+    propagator->connect();
 
     res = solver->solve ();
     cube.active = solver->active();
-    cube.n_solutions = se->n_sol();
+    cube.n_solutions = propagator->n_solutions();
 
     if (res == 0) { 
         write_file(false); 
@@ -144,8 +147,9 @@ int Worker::simplify() {
     send_simplify_result(res);
 
     std::filesystem::remove(current_instance);
+    propagator->disconnect();
 
-    delete se;
+    delete propagator;
     delete solver;
     solver = 0;
     return res;
