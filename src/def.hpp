@@ -42,6 +42,7 @@ enum MESSAGE_TYPE {
 	M_TASKINFO,
 	M_NUMCUBE,
 	M_CUBEINFO,
+	M_CLAUSES,
 };
 
 struct CubeInfo {

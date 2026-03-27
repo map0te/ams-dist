@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 #include "symbreak.hpp"
 #include "unembeddable_graphs.hpp"
@@ -77,9 +78,12 @@ bool SymmetryBreaker::cb_check_found_model (const std::vector<int> & model) {
     for (const auto& lit: model) {
         if (lit > 0) {
             solution.push_back(lit);
+            std::cout << lit << " ";
         }
         clause.push_back(-lit);
     }
+    std::cout << std::endl;
+    fflush(stdout);
 
     cas_clauses.push_back(clause);
     _solutions.push_back(solution);

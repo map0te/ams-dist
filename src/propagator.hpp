@@ -18,7 +18,10 @@ class Propagator : CaDiCaL::ExternalPropagator, CaDiCaL::Learner, CaDiCaL::Termi
     SymmetryBreaker* symmetrybreaker;
     bool portfolio_mode;
     bool has_cas_clause;
+    bool interrupted = false;
+    MPI_Comm comm;
 public:
+int rank, size;
     // Propagator
     Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver, bool portfolio_mode = false, MPI_Comm comm = MPI_COMM_WORLD);
     ~Propagator ();
@@ -26,6 +29,7 @@ public:
     std::list<std::vector<int>>& solutions ();
     void connect ();
     void disconnect ();
+    void terminate_all ();
 
     // CaDiCaL::ExternalPropagator
     void notify_assignment (int lit, bool is_fixed);
@@ -44,7 +48,7 @@ public:
     void learn (int lit);
 
     // CaDiCaL::Terminator
-    bool terminate () { return false; };
+    bool terminate ();
 };
 
 #endif

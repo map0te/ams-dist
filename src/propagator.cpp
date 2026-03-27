@@ -6,12 +6,14 @@
 
 Propagator::Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver,
     bool portfolio_mode, MPI_Comm comm) : 
-    solver(solver), portfolio_mode(portfolio_mode) {
+    solver(solver), portfolio_mode(portfolio_mode), comm(comm) {
 
     symmetrybreaker = new SymmetryBreaker (instance.order);
     if (portfolio_mode) {
         clausesharer = new ClauseSharer (comm);
     }
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
 }
 
 Propagator::~Propagator () {
@@ -47,6 +49,21 @@ void Propagator::disconnect () {
         solver->disconnect_learner ();
         solver->disconnect_terminator ();
     }
+}
+
+void Propagator::terminate_all () {
+    if (!interrupted) {
+        int dst = rank + 1;
+        int src = rank - 1; 
+        if (dst == size) dst = 0;
+        if (src < 0) src = size - 1;
+        MPI_Request req;
+        MPI_Isend(NULL, 0, MPI_INT, dst, M_INTERRUPT, comm, &req);
+        MPI_Request_free(&req);
+        MPI_Recv(NULL, 0, MPI_INT, src, 
+            M_INTERRUPT, comm, MPI_STATUS_IGNORE);
+    }
+    clausesharer->cleanup();
 }
 
 void Propagator::notify_assignment (int lit, bool is_fixed) {
@@ -96,4 +113,22 @@ bool Propagator::learning (int size) {
 
 void Propagator::learn (int lit) {
     clausesharer->learn (lit);
+}
+
+bool Propagator::terminate () {
+    int dst = rank + 1;
+    if (dst == size) dst = 0;
+    int flag;
+    MPI_Status status;
+    MPI_Request req;
+    MPI_Iprobe(MPI_ANY_SOURCE, M_INTERRUPT, comm, &flag, &status);
+    if (flag) {
+        MPI_Isend(NULL, 0, MPI_INT, dst, M_INTERRUPT, comm, &req);
+        MPI_Request_free(&req);
+        MPI_Recv(NULL, 0, MPI_INT, status.MPI_SOURCE, 
+            M_INTERRUPT, comm, MPI_STATUS_IGNORE);
+        interrupted = true;
+        return true;
+    }
+    return false;
 }
