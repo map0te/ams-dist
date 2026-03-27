@@ -20,8 +20,8 @@ class Propagator : CaDiCaL::ExternalPropagator, CaDiCaL::Learner, CaDiCaL::Termi
     bool has_cas_clause;
     bool interrupted = false;
     MPI_Comm comm;
+    int rank, size;
 public:
-int rank, size;
     // Propagator
     Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver, bool portfolio_mode = false, MPI_Comm comm = MPI_COMM_WORLD);
     ~Propagator ();

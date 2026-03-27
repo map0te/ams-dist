@@ -142,10 +142,11 @@ void ClauseSharer::export_clauses () {
 }
 
 void ClauseSharer::import_clauses () {
-    // cas clauses
     int flag;
     int count;
     MPI_Status status;
+    // cas clauses
+    cas_import_buffer.clear();
     MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status);
     while (flag) {
         MPI_Get_count(&status, MPI_INT, &count);
@@ -199,6 +200,11 @@ void ClauseSharer::learn_cas_clause (const std::vector<int>& cas_clause) {
         } else {
             cas_export_buffer_2.push_back(lit);
         }
+    }
+    if (using_cas_export_buffer_1) {
+        cas_export_buffer_1.push_back(0);
+    } else {
+        cas_export_buffer_2.push_back(0);   
     }
 }
 

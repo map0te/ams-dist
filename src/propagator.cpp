@@ -79,7 +79,8 @@ void Propagator::notify_backtrack (size_t new_level) {
 }
 
 bool Propagator::cb_check_found_model (const std::vector<int>& model) {
-    return symmetrybreaker->cb_check_found_model (model);
+    symmetrybreaker->cb_check_found_model (model);
+    return false;
 }
 
 int Propagator::cb_decide () { return 0; }
@@ -91,7 +92,7 @@ int Propagator::cb_add_reason_clause_lit (int plit) {
 
 bool Propagator::cb_has_external_clause () {
     has_cas_clause = symmetrybreaker->cb_has_external_clause ();
-    if (portfolio_mode && has_cas_clause) {
+    if (has_cas_clause && portfolio_mode) {
         for (auto& clause : symmetrybreaker->cas_clauses) {
             clausesharer->learn_cas_clause(clause);
         }
