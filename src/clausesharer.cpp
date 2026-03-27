@@ -19,17 +19,29 @@ ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
     export_buffer_1_size = 0;
     export_buffer_2_size = 0;
 
+    cas_import_buffer.reserve(size * BUFSIZE);
+    cas_export_buffer_1.reserve(BUFSIZE);
+    cas_export_buffer_2.reserve(BUFSIZE);
+
     req1 = new MPI_Request [size];
     req2 = new MPI_Request [size];
+    cas_req1 = new MPI_Request [size];
+    cas_req2 = new MPI_Request [size];
 
     for (int i = 0; i < size; i++) {
         req1[i] = MPI_REQUEST_NULL;
         req2[i] = MPI_REQUEST_NULL;
+        cas_req1[i] = MPI_REQUEST_NULL;
+        cas_req2[i] = MPI_REQUEST_NULL;
     }
 
     flag1 = true;
     flag2 = true;
+    cas_flag1 = true;
+    cas_flag2 = true;
+
     n_read_literals = 0;
+    n_read_cas_literals = 0;
 }
 
 ClauseSharer::~ClauseSharer () {
@@ -55,6 +67,20 @@ void ClauseSharer::export_clauses () {
             export_buffer_2_size = 0;
         }
     }
+    if (!cas_flag1) {
+        MPI_Testall(size, cas_req1, &cas_flag1, MPI_STATUS_IGNORE);
+        if (cas_flag1) {
+            MPI_Waitall(size, cas_req1, MPI_STATUS_IGNORE);
+            cas_export_buffer_1.clear();
+        }
+    }
+    if (!cas_flag2) {
+        MPI_Testall(size, cas_req2, &cas_flag2, MPI_STATUS_IGNORE);
+        if (cas_flag2) {
+            MPI_Waitall(size, cas_req2, MPI_STATUS_IGNORE);
+            cas_export_buffer_2.clear();
+        }
+    }
     if (using_export_buffer_1) {
         if (flag2 && export_buffer_1_size >= MIN_SEND_SIZE) {
             //printf("rank %d exporting clause buffer of size %d\n", rank, export_buffer_1_size); fflush(stdout);
@@ -78,13 +104,66 @@ void ClauseSharer::export_clauses () {
             using_export_buffer_1 = true;
         }
     }
+    if (using_cas_export_buffer_1) {
+        if (cas_flag2 && !cas_export_buffer_1.empty()) {
+            for (int dst = 0; dst < size; dst++) {
+                if (dst == rank) continue;
+                MPI_Isend(
+                    cas_export_buffer_1.data(),
+                    cas_export_buffer_1.size(),
+                    MPI_INT,
+                    dst,
+                    M_CASCLAUSES,
+                    comm,
+                    &cas_req1[dst]
+                );
+            }
+            cas_flag1 = false;
+            using_cas_export_buffer_1 = false;
+        }
+    } else {
+        if (cas_flag1 && !cas_export_buffer_2.empty()) {
+            for (int dst = 0; dst < size; dst++) {
+                if (dst == rank) continue;
+                MPI_Isend(
+                    cas_export_buffer_2.data(),
+                    cas_export_buffer_2.size(),
+                    MPI_INT,
+                    dst,
+                    M_CASCLAUSES,
+                    comm,
+                    &cas_req2[dst]
+                );
+            }
+            cas_flag2 = false;
+            using_cas_export_buffer_1 = true;
+        }
+    }
 }
 
 void ClauseSharer::import_clauses () {
-    import_buffer_size = 0;
-    n_read_literals = 0;
-    int flag, count;
+    // cas clauses
+    int flag;
+    int count;
     MPI_Status status;
+    MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status);
+    while (flag) {
+        MPI_Get_count(&status, MPI_INT, &count);
+        int old_buffer_size = cas_import_buffer.size();
+        cas_import_buffer.resize(count + old_buffer_size);
+        MPI_Recv(
+            cas_import_buffer.data() + old_buffer_size,
+            count,
+            MPI_INT,
+            status.MPI_SOURCE,
+            M_CASCLAUSES,
+            comm,
+            MPI_STATUS_IGNORE
+        );
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status);
+    }
+    // conflict clauses
+    import_buffer_size = 0;
     while (import_buffer_size < (size-1) * BUFSIZE) {
         MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
         if (!flag) break;
@@ -94,6 +173,9 @@ void ClauseSharer::import_clauses () {
             status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
         import_buffer_size += count;
     }
+
+    n_read_literals = 0;
+    n_read_cas_literals = 0;
 }
 
 bool ClauseSharer::learning (int size) {
@@ -110,7 +192,20 @@ void ClauseSharer::learn (int lit) {
     }
 }
 
+void ClauseSharer::learn_cas_clause (const std::vector<int>& cas_clause) {
+    for (int lit : cas_clause) {
+        if (using_cas_export_buffer_1) {
+            cas_export_buffer_1.push_back(lit);
+        } else {
+            cas_export_buffer_2.push_back(lit);
+        }
+    }
+}
+
 bool ClauseSharer::cb_has_external_clause () {
+    if (cas_import_buffer.size() - n_read_cas_literals) {
+        return true;
+    }
     if (import_buffer_size - n_read_literals) {
         return true;
     }
@@ -120,13 +215,10 @@ bool ClauseSharer::cb_has_external_clause () {
 }
 
 int ClauseSharer::cb_add_external_clause_lit () {
-    return import_buffer[n_read_literals++];
-}
-
-void ClauseSharer::share_cas_clause (std::vector<int>& clause) {
-    if (using_export_buffer_1) {
-        return;
+    if (cas_import_buffer.size() - n_read_cas_literals) {
+        return cas_import_buffer[n_read_cas_literals++];
     }
+    return import_buffer[n_read_literals++];
 }
 
 void ClauseSharer::cleanup () {
@@ -140,7 +232,9 @@ void ClauseSharer::cleanup () {
         if (!local_sends_completed) {
             MPI_Testall(size, req1, &flag1, MPI_STATUS_IGNORE);
             MPI_Testall(size, req2, &flag2, MPI_STATUS_IGNORE);
-            if (flag1 && flag2) {
+            MPI_Testall(size, cas_req1, &cas_flag1, MPI_STATUS_IGNORE);
+            MPI_Testall(size, cas_req2, &cas_flag2, MPI_STATUS_IGNORE);
+            if (flag1 && flag2 && cas_flag1 && cas_flag2) {
                 for (int dst = 0; dst < size; dst++) {
                     if (dst == rank) continue;
                     MPI_Isend(NULL, 0, MPI_INT, dst, M_COMPLETED, comm, &req);
@@ -149,10 +243,17 @@ void ClauseSharer::cleanup () {
                 local_sends_completed = true;
             }
         }
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &clauses_flag, &status);
+        if (clauses_flag) {
+            MPI_Get_count(&status, MPI_INT, &count);
+            cas_import_buffer.resize(count);
+            MPI_Recv(cas_import_buffer.data(), count, MPI_INT, 
+                status.MPI_SOURCE, M_CASCLAUSES, comm, MPI_STATUS_IGNORE);
+        }
         MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &clauses_flag, &status);
         if (clauses_flag) {
             MPI_Get_count(&status, MPI_INT, &count);
-            MPI_Recv(import_buffer, count, MPI_INT, 
+            MPI_Recv(import_buffer, count, MPI_INT,
                 status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
         }
         MPI_Iprobe(MPI_ANY_SOURCE, M_COMPLETED, comm, &completed_flag, &status);

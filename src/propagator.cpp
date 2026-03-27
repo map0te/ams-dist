@@ -91,6 +91,11 @@ int Propagator::cb_add_reason_clause_lit (int plit) {
 
 bool Propagator::cb_has_external_clause () {
     has_cas_clause = symmetrybreaker->cb_has_external_clause ();
+    if (portfolio_mode && has_cas_clause) {
+        for (auto& clause : symmetrybreaker->cas_clauses) {
+            clausesharer->learn_cas_clause(clause);
+        }
+    }
     bool has_shared_clause = 
         (portfolio_mode) ? clausesharer->cb_has_external_clause () : false;
     return has_cas_clause || has_shared_clause;

@@ -19,7 +19,6 @@
 #include "internal.hpp"
 
 class SymmetryBreaker {
-    std::vector<std::vector<int>> cas_clauses;
     std::deque<std::vector<int>> current_trail;
 
     int n = 0;
@@ -43,6 +42,7 @@ class SymmetryBreaker {
     bool is_canonical(int k, int p[], int& x, int& y, int& i, bool opt_pseudo_test);
 
 public:
+    std::vector<std::vector<int>> cas_clauses;
     SymmetryBreaker (int order);
     ~SymmetryBreaker ();
     void notify_assignment (int lit, bool is_fixed);
