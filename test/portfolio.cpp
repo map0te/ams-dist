@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
     propagator->connect();
     s.solve();
     propagator->terminate_all();
+    propagator->disconnect();
     delete propagator;
     MPI_Finalize();
 }

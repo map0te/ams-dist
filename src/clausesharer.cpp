@@ -89,6 +89,7 @@ void ClauseSharer::import_clauses () {
         MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
         if (!flag) break;
         MPI_Get_count(&status, MPI_INT, &count);
+        //printf("%d %d\n", rank, import_buffer_size + count); fflush(stdout);
         MPI_Recv(import_buffer + import_buffer_size, count, MPI_INT, 
             status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
         import_buffer_size += count;
@@ -129,13 +130,36 @@ void ClauseSharer::share_cas_clause (std::vector<int>& clause) {
 }
 
 void ClauseSharer::cleanup () {
-    int count, flag;
+    // cleans up any outstanding MPI_Isend 
+    MPI_Request req;
+    bool local_sends_completed = false;
+    int num_completed = 0;
+    int count, clauses_flag, completed_flag;
     MPI_Status status;
-    MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
-    while (flag) {
-        MPI_Get_count(&status, MPI_INT, &count);
-        MPI_Recv(import_buffer, count, MPI_INT, 
-            status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
-        MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
+    while (num_completed < size - 1 || !local_sends_completed) {
+        if (!local_sends_completed) {
+            MPI_Testall(size, req1, &flag1, MPI_STATUS_IGNORE);
+            MPI_Testall(size, req2, &flag2, MPI_STATUS_IGNORE);
+            if (flag1 && flag2) {
+                for (int dst = 0; dst < size; dst++) {
+                    if (dst == rank) continue;
+                    MPI_Isend(NULL, 0, MPI_INT, dst, M_COMPLETED, comm, &req);
+                    MPI_Request_free(&req);
+                }
+                local_sends_completed = true;
+            }
+        }
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &clauses_flag, &status);
+        if (clauses_flag) {
+            MPI_Get_count(&status, MPI_INT, &count);
+            MPI_Recv(import_buffer, count, MPI_INT, 
+                status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
+        }
+        MPI_Iprobe(MPI_ANY_SOURCE, M_COMPLETED, comm, &completed_flag, &status);
+        if (completed_flag) {    
+            MPI_Recv(NULL, 0, MPI_INT, 
+                status.MPI_SOURCE, M_COMPLETED, comm, MPI_STATUS_IGNORE);
+            num_completed++;
+        }
     } 
 }

@@ -1,12 +1,14 @@
 CC = mpicxx
 CFLAGS = -O3 -Wall -Icadical/src
+CADICAL = -Lcadical/build -lcadical
 
-all: ams-dist
+all: ams-dist portfolio-test
 
 clean:
 	cd cadical; make clean; cd ..
 	rm -rf build
 	rm -f ams-dist
+	rm -f portfolio-test
 
 build:
 	mkdir -p build
@@ -36,4 +38,7 @@ cadical/build/libcadical.a: cadical/src/*.cpp
 	cd cadical; ./configure && make; cd ..
 
 ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/clausesharer.o build/worker.o build/manager.o build/statustracker.o build/propagator.o src/main.cpp
-	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist -Lcadical/build -lcadical
+	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist $(CADICAL)
+
+portfolio-test: cadical/build/libcadical.a build/symbreak.o build/clausesharer.o build/propagator.o test/portfolio.cpp
+	$(CC) $(CFLAGS) build/symbreak.o build/clausesharer.o build/propagator.o test/portfolio.cpp -o portfolio-test $(CADICAL)
