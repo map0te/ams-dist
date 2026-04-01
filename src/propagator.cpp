@@ -44,26 +44,26 @@ void Propagator::connect () {
 }
 
 void Propagator::disconnect () {
+    if (portfolio_mode) {
+        if (!interrupted) {
+            int dst = rank + 1;
+            int src = rank - 1; 
+            if (dst == size) dst = 0;
+            if (src < 0) src = size - 1;
+            MPI_Request req;
+            MPI_Isend(NULL, 0, MPI_INT, dst, M_INTERRUPT, comm, &req);
+            MPI_Recv(NULL, 0, MPI_INT, src, 
+                M_INTERRUPT, comm, MPI_STATUS_IGNORE);
+            MPI_Wait(&req, MPI_STATUS_IGNORE);
+        }
+        MPI_Barrier(comm);
+        clausesharer->cleanup ();
+    }
     solver->disconnect_external_propagator ();
     if (portfolio_mode) {
         solver->disconnect_learner ();
         solver->disconnect_terminator ();
     }
-}
-
-void Propagator::terminate_all () {
-    if (!interrupted) {
-        int dst = rank + 1;
-        int src = rank - 1; 
-        if (dst == size) dst = 0;
-        if (src < 0) src = size - 1;
-        MPI_Request req;
-        MPI_Isend(NULL, 0, MPI_INT, dst, M_INTERRUPT, comm, &req);
-        MPI_Request_free(&req);
-        MPI_Recv(NULL, 0, MPI_INT, src, 
-            M_INTERRUPT, comm, MPI_STATUS_IGNORE);
-    }
-    clausesharer->cleanup();
 }
 
 void Propagator::notify_assignment (int lit, bool is_fixed) {

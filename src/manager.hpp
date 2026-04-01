@@ -43,7 +43,7 @@ private:
     BeamLookahead beamlookahead;
     StatusTracker statustracker;
 
-    std::queue<CubeInfo> simplify_queue;
+    std::vector<CubeInfo> simplify_queue;
     std::vector<CubeInfo> cube_queue;
     std::vector<CubeInfo> solve_queue;
 

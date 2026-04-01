@@ -124,6 +124,12 @@ void Manager::bcast_dcube_task() {
     return;
 }
 
+void Manager::bcast_portfolio_simplify_task () {
+    TaskInfo task;
+    task.type = PSIMPLIFY;
+    task.n_cubeinfo = simplify_queue.size();
+}
+
 void Manager::exec_dcube_task() {
     MPI_Comm comm;
     MPI_Comm_split(MPI_COMM_WORLD, 0, 0, &comm);

@@ -30,10 +30,11 @@ int main(int argc, char** argv) {
             s.phase(i);
         }
     }
+    if (rank == 0) s.limit("conflicts", 1000);
     propagator->connect();
     s.solve();
-    propagator->terminate_all();
     propagator->disconnect();
+    if (rank == 0) s.write_dimacs ("test.out", max_var);
     delete propagator;
     MPI_Finalize();
 }
