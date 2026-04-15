@@ -4,7 +4,9 @@
 #include <mpi.h>
 #include <vector>
 
-class ClauseSharer {
+#include "internal.hpp"
+
+class ClauseSharer : public CaDiCaL::Learner {
     MPI_Comm comm;
     int rank, size;
 
@@ -38,10 +40,10 @@ public:
     ~ClauseSharer ();
     bool learning (int size);
     void learn (int lit);
-    void learn_cas_clause (const std::vector<int>& cas_clause);
     bool cb_has_external_clause ();
     int cb_add_external_clause_lit ();
-    void cleanup ();
+    void learn_cas_clause (const std::vector<int>& cas_clause);
+    void cleanup ();    
 };
 
 #endif

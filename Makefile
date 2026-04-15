@@ -2,7 +2,7 @@ CC = mpicxx
 CFLAGS = -O3 -Wall -Icadical/src
 CADICAL = -Lcadical/build -lcadical
 
-all: ams-dist portfolio-test
+all: ams-dist
 
 clean:
 	cd cadical; make clean; cd ..
@@ -34,10 +34,16 @@ build/manager.o: src/manager.cpp | build
 build/statustracker.o: src/statustracker.cpp | build
 	$(MAKEDIR) $(CC) $(CFLAGS) -c src/statustracker.cpp -o build/statustracker.o
 
+build/solverprocess.o: src/solverprocess.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/solverprocess.cpp -o build/solverprocess.o
+
+build/util.o: src/util.cpp | build
+	$(MAKEDIR) $(CC) $(CFLAGS) -c src/util.cpp -o build/util.o
+
 cadical/build/libcadical.a: cadical/src/*.cpp
 	cd cadical; ./configure && make; cd ..
 
-ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/clausesharer.o build/worker.o build/manager.o build/statustracker.o build/propagator.o src/main.cpp
+ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/clausesharer.o build/worker.o build/manager.o build/statustracker.o build/propagator.o build/solverprocess.o build/util.o src/main.cpp
 	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist $(CADICAL)
 
 portfolio-test: cadical/build/libcadical.a build/symbreak.o build/clausesharer.o build/propagator.o test/portfolio.cpp

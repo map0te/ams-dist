@@ -27,14 +27,15 @@ long Propagator::n_solutions () {
     return symmetrybreaker->n_solutions ();
 }
 
-std::list<std::vector<int>>& Propagator::solutions () {
+std::vector<std::vector<int>>& Propagator::solutions () {
     return symmetrybreaker->solutions ();
 }
 
 void Propagator::connect () {
     solver->connect_external_propagator (this);
     if (portfolio_mode) { 
-        solver->connect_learner (this);
+        solver->connect_learner (clausesharer);
+        //solver->connect_importer (clausesharer);
         solver->connect_terminator (this);
     }
     std::vector<int> vars = symmetrybreaker->observed_vars ();
@@ -62,6 +63,7 @@ void Propagator::disconnect () {
     solver->disconnect_external_propagator ();
     if (portfolio_mode) {
         solver->disconnect_learner ();
+        //solver->disconnect_importer ();
         solver->disconnect_terminator ();
     }
 }
@@ -107,18 +109,8 @@ int Propagator::cb_add_external_clause_lit () {
         return symmetrybreaker->cb_add_external_clause_lit ();
     } else if (portfolio_mode) {
         return clausesharer->cb_add_external_clause_lit ();
-    } else {
-        MPI_Abort(MPI_COMM_WORLD, 1);
-        return 0;
     }
-}
-
-bool Propagator::learning (int size) {
-    return clausesharer->learning (size);
-}
-
-void Propagator::learn (int lit) {
-    clausesharer->learn (lit);
+    return false;
 }
 
 bool Propagator::terminate () {

@@ -135,6 +135,8 @@ int main(int argc, char **argv) {
         Manager manager(instance);
         manager.init_time();
         manager.print_time();
+        printf("----- ams-dist -----\n");
+        manager.print_time();
         printf("Running on %d cores\n", size);
         manager.print_time();
         printf("Instance: %s\n", positional_args[1].c_str()); fflush(stdout);

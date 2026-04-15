@@ -2,12 +2,21 @@
 #include <chrono>
 #include <filesystem>
 
+#include "internal.hpp"
+
 #include "def.hpp"
 #include "manager.hpp"
+#include "propagator.hpp"
 #include "worker.hpp"
+#include "util.hpp"
+
 
 #define ELAPSED (clock()-start_time) / (double) CLOCKS_PER_SEC
 #define INFO(info) printf("%lf %s\n", ELAPSED, info); fflush(stdout);
+
+inline void Manager::append_solutions(std::vector<std::vector<int>>& new_solutions) {
+    solutions.insert(solutions.end(), new_solutions.begin(), new_solutions.end());
+}
 
 void Manager::send_solve_task(bool interruptable) {
     int rank = idle_workers.front();
@@ -32,7 +41,7 @@ void Manager::send_solve_task(bool interruptable) {
 
 void Manager::send_simplify_task() {
     int rank = idle_workers.front();
-    const CubeInfo& cube = simplify_queue.front();
+    const CubeInfo& cube = simplify_queue.back();
     TaskInfo task;
 
     task.type = SIMPLIFY;
@@ -43,7 +52,7 @@ void Manager::send_simplify_task() {
     worker_info[rank].task = task;
 
     idle_workers.pop();
-    simplify_queue.pop();
+    simplify_queue.pop_back();
 
     MPI_Send(&worker_info[rank].task, 1, MPI_TASKINFO, rank, M_TASKINFO, MPI_COMM_WORLD);
     MPI_Send(&worker_info[rank].cube, 1, MPI_CUBEINFO, rank, M_CUBEINFO, MPI_COMM_WORLD);
@@ -124,55 +133,88 @@ void Manager::bcast_dcube_task() {
     return;
 }
 
-void Manager::bcast_portfolio_simplify_task () {
+void Manager::bcast_psimp_task () {
     TaskInfo task;
     task.type = PSIMPLIFY;
     task.n_cubeinfo = simplify_queue.size();
+    for (int rank = 1; rank <= n_workers; rank++) {
+        worker_info[rank].status = PSIMPLIFYING;
+        worker_info[rank].task = task;
+        MPI_Send(&task, 1, MPI_TASKINFO, rank, M_TASKINFO, MPI_COMM_WORLD);
+    }
+    MPI_Bcast(simplify_queue.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, MPI_COMM_WORLD);
+    return;
+}
+
+inline void generate_new_cubes (CubeInfo& cube, CubeInfo new_cubes[]) {
+    std::string c1id = std::string(cube.id) + "1";
+    std::string c2id = std::string(cube.id) + "2";
+    strcpy(new_cubes[0].id, c1id.c_str());
+    strcpy(new_cubes[1].id, c2id.c_str());
 }
 
 void Manager::exec_dcube_task() {
     MPI_Comm comm;
     MPI_Comm_split(MPI_COMM_WORLD, 0, 0, &comm);
     CubeInfo cube = cube_queue[0];
-    std::string current_instance;
-    if (!std::strcmp(cube.id, "")) {
-        current_instance = std::string(instance.top_name) + ".simp";
-    } else {
-        current_instance = std::string(instance.top_name) + "." + std::string(cube.id) + ".cnf.simp";
-    }
-    std::string out1 = std::string(instance.top_name) + "." + std::string(cube.id) + "1.cnf";
-    std::string out2 = std::string(instance.top_name) + "." + std::string(cube.id) + "2.cnf";
-    beamlookahead.setup(instance.order, current_instance.c_str(), comm);
-    beamlookahead.lookahead();
-    beamlookahead.write_cubes(current_instance.c_str(), out1.c_str(), out2.c_str());
-    MPI_Barrier(MPI_COMM_WORLD);
-    std::string c1id = std::string(cube.id) + "1";
-    std::string c2id = std::string(cube.id) + "2";
-    CubeInfo c[2];
-    strcpy(c[0].id, c1id.c_str());
-    strcpy(c[1].id, c2id.c_str());
-    simplify_queue.push(c[0]);
-    simplify_queue.push(c[1]);
-    std::filesystem::remove(current_instance);
+    CubeInfo new_cubes[2];
+    solver->set_cube (&cube);
+    solver->distributed_cube (comm);
+    generate_new_cubes (cube, new_cubes);
+    simplify_queue.push_back(new_cubes[0]);
+    simplify_queue.push_back(new_cubes[1]);
 }
 
-void Manager::recv_dcube_task(int ntasks, CubeInfo new_cubes[]) {
+void Manager::exec_psimp_task() {
+    MPI_Comm comm;
+    MPI_Comm_split(MPI_COMM_WORLD, 0, 0, &comm);
+    CubeInfo cube = simplify_queue[0];
+    solver->set_cube (&cube);
+    solver->portfolio_simplify (comm);
+    if (cube.status == UNKNOWN) {
+        cube_queue.push_back(cube);
+    }
+}
+
+void Manager::recv_dcube_task() {
     MPI_Status status;
     int count, rank;
-    for (int i = 0; i < ntasks-1; i++) {
+    CubeInfo new_cubes[2];
+    for (int i = 0; i < (int) cube_queue.size() - 1; i++) {
         MPI_Probe(MPI_ANY_SOURCE, M_NUMCUBE, MPI_COMM_WORLD, &status);
         rank = status.MPI_SOURCE;
         MPI_Recv(&count, 1, MPI_INT, rank, M_NUMCUBE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         if (count) {
             MPI_Recv(new_cubes, count, MPI_CUBEINFO, rank, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             for (int j = 0; j < count; j++) {
-                simplify_queue.push(new_cubes[j]);
+                simplify_queue.push_back(new_cubes[j]);
             }
         }
     }
     for (rank = 1; rank <= n_workers; rank++) {
         worker_info[rank].status = IDLE;
     }
+    cube_queue.clear();
+    return;
+}
+
+void Manager::recv_psimp_task() {
+    MPI_Status status;
+    int count, rank;
+    CubeInfo new_cube;
+    for (int i = 0; i < (int) simplify_queue.size() - 1; i++) {
+        MPI_Probe(MPI_ANY_SOURCE, M_NUMCUBE, MPI_COMM_WORLD, &status);
+        rank = status.MPI_SOURCE;
+        MPI_Recv(&count, 1, MPI_INT, rank, M_NUMCUBE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&new_cube, count, MPI_CUBEINFO, rank, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if (new_cube.status == UNKNOWN) {
+            cube_queue.push_back(new_cube);
+        }
+    }
+    for (rank = 1; rank <= n_workers; rank++) {
+        worker_info[rank].status = IDLE;
+    }
+    simplify_queue.clear();
     return;
 }
 
@@ -215,17 +257,15 @@ void Manager::init_time() {
 }
 
 void Manager::start() {
+    int size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     CubeInfo top;
     top.active = 0;
     std::strcpy(top.id, "");
-    simplify_queue.push(top);
-    int n_prev_cubes = 0;
-    bool force_solving = false;
+    simplify_queue.push_back(top);
 
-    print_time();
-    printf("Beginning Cubing...\n"); fflush(stdout);
+    print_time(); printf("----- Cubing -----\n"); fflush(stdout);
 
-    CubeInfo new_cubes[2];
     int cube_s = 0;
     int simp_s = 0;
 
@@ -233,43 +273,46 @@ void Manager::start() {
 
     // ------- Distributed Cubing ------- //
     while ( !simplify_queue.empty() ) {
-        auto simp_start = std::chrono::steady_clock::now();
         // Simplify
-        while (!simplify_queue.empty()) {
-            if (idle_workers.empty()) {
+        auto simp_start = std::chrono::steady_clock::now();
+        if ((int) simplify_queue.size() < size) {
+            bcast_psimp_task();
+            exec_psimp_task();
+            recv_psimp_task();
+        } else {
+            while (!simplify_queue.empty()) {
+                if (idle_workers.empty()) {
+                    recv_simplify_task();
+                }
+                send_simplify_task();
+            }
+            while (n_simplifying) {
                 recv_simplify_task();
             }
-            send_simplify_task();
-        }
-        while (n_simplifying) {
-            recv_simplify_task();
         }
         auto simp_end = std::chrono::steady_clock::now();
         simp_s = std::chrono::duration_cast<std::chrono::milliseconds>(simp_end - simp_start).count();
-        print_time();
-        printf("Cubes: %ld (d-cube: %d.%03ds, simplify: %d.%03ds)\n", cube_queue.size(), cube_s / 1000, cube_s % 1000, simp_s / 1000, simp_s % 1000); fflush(stdout);
+        total_simplifying_time += std::chrono::duration_cast<std::chrono::milliseconds>(simp_end - simp_start);
+
+        print_time(); printf("Cubes: %ld (d-cube: %d.%03ds, p-simplify: %d.%03ds)\n", 
+            cube_queue.size(), cube_s / 1000, cube_s % 1000, simp_s / 1000, simp_s % 1000); fflush(stdout);
 
         if ((int) cube_queue.size() == 0) { break; };
         if ((int) cube_queue.size() >= n_workers) { break; };
-        if (instance.aggressive && (int) cube_queue.size() < n_prev_cubes) {
-            print_time();
-            printf("Number of cubes has decreased. Solving without interruption\n");
-            force_solving = true;
-            break; 
-        };
-
-        n_prev_cubes = cube_queue.size();
 
         // Cube
+        auto cube_start = std::chrono::steady_clock::now();
         bcast_dcube_task();
         exec_dcube_task();
-        recv_dcube_task(cube_queue.size(), new_cubes);
-        cube_queue.clear();
-        cube_s = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - simp_end).count();
+        recv_dcube_task();
+        auto cube_end = std::chrono::steady_clock::now();
+
+        cube_s = std::chrono::duration_cast<std::chrono::milliseconds>(cube_end - cube_start).count();
+        total_cubing_time += std::chrono::duration_cast<std::chrono::milliseconds>(cube_end - cube_start);
     }
 
-    print_time();
-    printf("Generated %ld cubes\n", cube_queue.size()); fflush(stdout);
+    print_time(); printf("Generated %ld cubes\n", cube_queue.size()); fflush(stdout);
+
     while (!cube_queue.empty()) {
         solve_queue.push_back(cube_queue.back());
         cube_queue.pop_back();
@@ -285,17 +328,17 @@ void Manager::start() {
     while (!solve_queue.empty() || n_solving || n_terminated) {
         // send work to free cores
         while (!solve_queue.empty() && ! idle_workers.empty()) {
-            send_solve_task(!force_solving);
+            send_solve_task(false);
         }
         // recv completed/interrupted solves
         iprobe_recv_solve_task();
         // check for active var updates
         iprobe_recv_active();
         while (!solve_queue.empty() && ! idle_workers.empty()) {
-            send_solve_task(!force_solving);
+            send_solve_task(false);
         }
         // interrupt solvers
-        if (!force_solving) {
+        if (false) {
             int to_interrupt = n_workers - n_solving - 2*n_terminated;
             for (int i = 0; i < to_interrupt; i++) {
                 if (statustracker.size()) {
@@ -335,8 +378,70 @@ void Manager::start() {
     for (int rank = 1; rank <= n_workers; rank++) {
         MPI_Send(&end, 1, MPI_TASKINFO, rank, M_TASKINFO, MPI_COMM_WORLD);
     }
+    print_time ();
+    printf("----- Unsatisfiable -----\n"); fflush(stdout);
+
+    std::vector<int> local_serialized_solutions;
+    for (const auto& solution : solutions) {
+        for (auto lit : solution) {
+            local_serialized_solutions.push_back (lit);
+        }
+        local_serialized_solutions.push_back (0);
+    }
+    int local_serialized_count = local_serialized_solutions.size();
+
+    std::vector<int> serialized_solutions;
+    int* sol_counts = new int [size];
+    int* sol_counts_displs = new int [size];
+    int sol_counts_total;
+    int local_count = solutions.size();
+    sol_counts_displs[0] = 0;
+
+    MPI_Gather(&local_count, 1, MPI_INT, sol_counts, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    for (int i = 1; i < size; i++) {
+        sol_counts_displs[i] = sol_counts_displs[i-1] + sol_counts[i-1];
+    }
+    sol_counts_total = sol_counts_displs[size-1] + sol_counts[size-1];
+
+    serialized_solutions.resize(sol_counts_total);
+    MPI_Gatherv(
+        local_serialized_solutions.data(),
+        local_serialized_count,
+        MPI_INT,
+        serialized_solutions.data(),
+        sol_counts,
+        sol_counts_displs,
+        MPI_INT,
+        0,
+        MPI_COMM_WORLD
+    );
+
+    std::vector<int> temp_solution;
+    std::set<std::vector<int>> final_solutions;
+
+    for (std::size_t i = 0; i < serialized_solutions.size(); i++) {
+        if (serialized_solutions[i] == 0) {
+            final_solutions.insert(temp_solution);
+            temp_solution.clear();
+        } else {
+            temp_solution.push_back(serialized_solutions[i]);
+        }
+    }
+
+    auto total_time = total_cubing_time + total_simplifying_time;
+
     print_time();
-    printf("Found %ld solutions\n", n_solutions); fflush(stdout);
+    printf("Found %ld solutions\n", final_solutions.size()); fflush(stdout);
+    print_time();
+    printf("----- Statistics -----\n"); fflush(stdout);
+    print_time();
+    printf("Runtime: %3.2f%% cubing, %3.2f%% simplifying, %3.2f%% solving\n", 
+        total_cubing_time.count() / (double) total_time.count() * 100,
+        total_simplifying_time.count() / (double) total_time.count() * 100,
+        0.0
+    ); fflush(stdout); 
+    delete [] sol_counts;
+    delete [] sol_counts_displs;
     return;
 }
 

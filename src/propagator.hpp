@@ -12,7 +12,7 @@ class ClauseSharer;
 class SymmetryBreaker;
 struct InstanceInfo;
 
-class Propagator : CaDiCaL::ExternalPropagator, CaDiCaL::Learner, CaDiCaL::Terminator {
+class Propagator : CaDiCaL::ExternalPropagator, CaDiCaL::Terminator {
     CaDiCaL::Solver* solver;
     ClauseSharer* clausesharer;
     SymmetryBreaker* symmetrybreaker;
@@ -26,7 +26,7 @@ public:
     Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver, bool portfolio_mode = false, MPI_Comm comm = MPI_COMM_WORLD);
     ~Propagator ();
     long n_solutions ();
-    std::list<std::vector<int>>& solutions ();
+    std::vector<std::vector<int>>& solutions ();
     void connect ();
     void disconnect ();
     void terminate_all ();
@@ -42,10 +42,6 @@ public:
 
     bool cb_has_external_clause ();
     int cb_add_external_clause_lit ();
-
-    // CaDiCaL::Learner
-    bool learning (int size);
-    void learn (int lit);
 
     // CaDiCaL::Terminator
     bool terminate ();

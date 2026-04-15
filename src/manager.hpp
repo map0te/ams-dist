@@ -9,6 +9,7 @@
 #include "beamlookahead.hpp"
 #include "def.hpp"
 #include "statustracker.hpp"
+#include "solverprocess.hpp"
 
 struct WorkerInfo {
     int status;
@@ -28,6 +29,7 @@ public:
         n_solving = 0;
         n_terminated = 0;
         for (int i = 1; i <= n_workers; i++) { idle_workers.push(i); }
+        solver = new DistributedSolverProcess(instance);
     }
     void start();
     void print_time();
@@ -35,12 +37,15 @@ public:
 private:
     std::chrono::steady_clock::time_point start_time;
 
+    std::chrono::milliseconds total_simplifying_time{};
+    std::chrono::milliseconds total_cubing_time{};
+
     int n_proc, n_workers;
     int n_cubing, n_solving, n_simplifying, n_terminated;
     long n_solutions = 0;
 
     InstanceInfo instance;
-    BeamLookahead beamlookahead;
+    DistributedSolverProcess* solver;
     StatusTracker statustracker;
 
     std::vector<CubeInfo> simplify_queue;
@@ -50,6 +55,9 @@ private:
     std::queue<int> idle_workers;
     std::vector<WorkerInfo> worker_info;
 
+    std::vector<std::vector<int>> solutions;
+    inline void append_solutions(std::vector<std::vector<int>>& new_solutions);
+
     void send_simplify_task();
     int recv_simplify_task();
 
@@ -58,7 +66,11 @@ private:
 
     void bcast_dcube_task();
     void exec_dcube_task();
-    void recv_dcube_task(int ntasks, CubeInfo new_cubes[]);
+    void recv_dcube_task();
+
+    void bcast_psimp_task();
+    void exec_psimp_task();
+    void recv_psimp_task();
 
     void send_interrupt(int rank);
     void iprobe_recv_active();

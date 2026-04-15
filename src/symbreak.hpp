@@ -3,7 +3,6 @@
 
 #include <cstddef>
 #include <queue>
-#include <list>
 #include <set>
 #include <vector>
 
@@ -23,7 +22,7 @@ class SymmetryBreaker {
 
     int n = 0;
     int num_edge_vars = 0;
-    std::list<std::vector<int>> _solutions;
+    std::vector<std::vector<int>> _solutions;
 
     int* assign;
     bool* fixed;
@@ -53,7 +52,7 @@ public:
     bool cb_has_external_clause ();
     int cb_add_external_clause_lit ();
     size_t n_solutions() { return _solutions.size(); };
-    std::list<std::vector<int>>& solutions() { return _solutions; };
+    std::vector<std::vector<int>>& solutions() { return _solutions; };
 };
 
 #endif

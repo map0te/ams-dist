@@ -1,15 +1,20 @@
+#include <cassert>
+
+#include "internal.hpp"
+
 #include "clausesharer.hpp"
 #include "def.hpp"
 
 #define MIN_SEND_SIZE 1024
 #define MAX_CLAUSE_SIZE 11
-#define BUFSIZE MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE
+#define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
 
 ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
 
     using_export_buffer_1 = true;
+    using_cas_export_buffer_1 = true;
 
     import_buffer = new int [size * BUFSIZE];
     export_buffer_1 = new int [BUFSIZE];
@@ -50,6 +55,8 @@ ClauseSharer::~ClauseSharer () {
     delete [] export_buffer_2;
     delete [] req1;
     delete [] req2;
+    delete [] cas_req1;
+    delete [] cas_req2; 
 }
 
 void ClauseSharer::export_clauses () {
@@ -167,6 +174,7 @@ void ClauseSharer::import_clauses () {
         MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
         if (!flag) break;
         MPI_Get_count(&status, MPI_INT, &count);
+        assert (count < BUFSIZE);
         MPI_Recv(import_buffer + import_buffer_size, count, MPI_INT, 
             status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
         import_buffer_size += count;
@@ -208,7 +216,7 @@ void ClauseSharer::learn_cas_clause (const std::vector<int>& cas_clause) {
 bool ClauseSharer::cb_has_external_clause () {
     if (cas_import_buffer.size() - n_read_cas_literals) {
         return true;
-    }
+    } 
     if (import_buffer_size - n_read_literals) {
         return true;
     }
