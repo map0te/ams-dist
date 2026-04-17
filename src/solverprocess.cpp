@@ -126,8 +126,10 @@ int DistributedSolverProcess::simplify () {
     input_file = get_input_filename (true);
     output_file = input_file + ".simp";
 
-    solver->limit ("conflicts", SIMPLIMIT);
+    solver->limit ("conflicts", SIMPLIMIT * 2);
     solver->set ("quiet", 1);
+    solver->set ("elim", 0);
+    solver->set ("factor", 0);
     solver->read_dimacs (input_file.c_str(), max_var, true, incremental, cube_literals);
 
     propagator->connect ();
@@ -139,7 +141,7 @@ int DistributedSolverProcess::simplify () {
     append_solutions (propagator->solutions());
 
     if (res == 0) {
-        solver->write_dimacs (output_file.c_str(), solver->vars());
+        write_dimacs_with_units (output_file.c_str());
     }
 
     std::filesystem::remove(input_file);
@@ -153,12 +155,14 @@ int DistributedSolverProcess::solve () {
     int max_var, res;
     bool incremental;
     std::vector<int> cube_literals;
-    std::string input_file;
+    std::string input_file, output_file;
 
     solver = new CaDiCaL::Solver ();
+    solver->set ("terminateint", 100);
     propagator = new Propagator (instance, solver);
 
-    input_file = get_input_filename (false);
+    input_file = get_input_filename (true);
+    output_file = input_file + ".simp";
 
     solver->set ("quiet", 1);
     solver->read_dimacs (input_file.c_str(), max_var, true, incremental, cube_literals);
@@ -166,10 +170,45 @@ int DistributedSolverProcess::solve () {
     start_time = std::chrono::steady_clock::now();
     propagator->connect ();
     solver->connect_terminator (this);
+    cube->active = solver->irredundant ();
     res = solver->solve ();
     solver->disconnect_terminator ();
     propagator->disconnect ();
 
+    cube->status = res;
+    cube->active = solver->active ();
+    append_solutions (propagator->solutions());
+
+    std::filesystem::remove(input_file);
+
+    if (res != 0) { 
+        return res; 
+    }
+
+    // cube
+    write_dimacs_with_units (output_file.c_str());
+    bool cube_res = distributed_cube (MPI_COMM_SELF);
+    
+    if (!cube_res) {
+        delete solver;
+        delete propagator;
+        solver = new CaDiCaL::Solver ();
+        solver->set ("terminateint", 100);
+        propagator = new Propagator (instance, solver);
+        solver->set ("quiet", 1);
+        solver->read_dimacs (output_file.c_str(), max_var, true, incremental, cube_literals);
+        propagator->connect ();
+        res = solver->solve ();
+        solver->disconnect_terminator ();
+        propagator->disconnect ();
+        assert(res != 0);
+        cube->status = res;
+        cube->active = solver->active ();
+        append_solutions (propagator->solutions());
+    }
+
+    delete propagator;
+    delete solver;
     return res;
 }
 
@@ -235,25 +274,28 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
     return res;
 }
 
-void DistributedSolverProcess::distributed_cube (MPI_Comm comm) {
+bool DistributedSolverProcess::distributed_cube (MPI_Comm comm) {
     int job_rank;
+    bool res;
     std::string input_file;
 
     input_file = get_input_filename (false);
 
     beamlookahead.setup (instance.order, input_file.c_str(), comm);
-    beamlookahead.lookahead ();
-    beamlookahead.write_cubes (
-        input_file.c_str(), 
-        get_output_filename(1).c_str(),  
-        get_output_filename(2).c_str()
-    );
-    MPI_Barrier (MPI_COMM_WORLD);
+    res = beamlookahead.lookahead ();
+    if (res) {
+        beamlookahead.write_cubes (
+            input_file.c_str(), 
+            get_output_filename(1).c_str(),  
+            get_output_filename(2).c_str()
+        );
+    }
 
     MPI_Comm_rank (comm, &job_rank);
-    if (job_rank == 0) {
+    if (job_rank == 0 && res) {
         std::filesystem::remove (input_file);
     }
+    return res;
 }
 
 bool DistributedSolverProcess::terminate () {
@@ -261,17 +303,19 @@ bool DistributedSolverProcess::terminate () {
     auto seconds_elapsed = std::chrono::duration_cast<std::chrono::seconds>(time_stamp - start_time).count();
     if (seconds_elapsed < instance.twarmup) { return false; }
     // send active var update
-    MPI_Request req;
-    if (solver->active() < cube->active) {
-        cube->active = solver->active();
-        MPI_Isend(&cube->active, 1, MPI_INT, 0, M_ACTIVE, MPI_COMM_WORLD, &req);
-        MPI_Request_free(&req);
-    }
     // probe for interrupt request
     MPI_Status status;
     int flag;
     MPI_Iprobe(0, M_INTERRUPT, MPI_COMM_WORLD, &flag, &status);
-    if (!flag) { return false; }
+    if (!flag) { 
+        MPI_Request req;
+    //if (solver->irredundant () < cube->active) {
+        cube->active = solver->irredundant ();
+        MPI_Isend(&cube->active, 1, MPI_INT, 0, M_ACTIVE, MPI_COMM_WORLD, &req);
+        MPI_Request_free(&req);
+    //}
+        return false; 
+    }
     MPI_Recv(NULL, 0, MPI_INT, 0, M_INTERRUPT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     return true;
 }

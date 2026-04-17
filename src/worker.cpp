@@ -21,7 +21,7 @@ Worker::~Worker () {
 }
 
 int Worker::recv_task() {
-    int ncube, job_rank;
+    int ncube, job_rank, job_size, res;
     MPI_Comm comm;
     std::vector<CubeInfo> cubes;
     CubeInfo new_cubes[2];
@@ -31,9 +31,22 @@ int Worker::recv_task() {
 
     switch (task.type) {
     case SOLVE:
-        //MPI_Recv()
+        MPI_Recv(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        cube = cubes.front();
+        solver->set_cube (&cube);
+        res = solver->solve ();
+        if (res == 0) {
+            ncube = 2;
+            generate_new_cubes (new_cubes);
+        } else {
+            ncube = 0;
+        }
+        MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
+        MPI_Send(new_cubes, ncube, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD);
+        if (res != 0) {
+            MPI_Recv(NULL, 0, MPI_INT, 0, M_INTERRUPT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
         return 1;
-        break;
     case SIMPLIFY:
         MPI_Recv(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         cube = cubes.front();
@@ -60,10 +73,15 @@ int Worker::recv_task() {
     case PSIMPLIFY:
         MPI_Bcast(cubes.data(), task.n_cubeinfo, MPI_CUBEINFO, 0, MPI_COMM_WORLD);
         MPI_Comm_split(MPI_COMM_WORLD, rank % task.n_cubeinfo, rank, &comm);
+        MPI_Comm_size(comm, &job_size);
         MPI_Comm_rank(comm, &job_rank);
         cube = cubes[rank % task.n_cubeinfo];
         solver->set_cube (&cube);
-        solver->portfolio_simplify (comm);
+        if (job_size == 1) {
+            solver->simplify ();
+        } else {
+            solver->portfolio_simplify (comm);
+        }
         if (job_rank == 0) {
             ncube = 1;
             MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
@@ -71,7 +89,6 @@ int Worker::recv_task() {
         }
         return 1;
     default:
-        
         return 0;
     }
 }
@@ -81,6 +98,8 @@ void inline Worker::generate_new_cubes (CubeInfo new_cubes[]) {
     std::string c2id = std::string(cube.id) + "2";
     strcpy(new_cubes[0].id, c1id.c_str());
     strcpy(new_cubes[1].id, c2id.c_str());
+    new_cubes[0].status = UNKNOWN;
+    new_cubes[1].status = UNKNOWN;
 }
 
 void Worker::gather_solutions () {

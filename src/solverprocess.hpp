@@ -35,7 +35,7 @@ public:
     int simplify ();
     int solve ();
     int portfolio_simplify (MPI_Comm comm);
-    void distributed_cube (MPI_Comm comm);
+    bool distributed_cube (MPI_Comm comm);
 
     inline std::string get_input_filename (bool simplifying);
     inline std::string get_output_filename (int index);

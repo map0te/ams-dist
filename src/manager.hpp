@@ -39,6 +39,7 @@ private:
 
     std::chrono::milliseconds total_simplifying_time{};
     std::chrono::milliseconds total_cubing_time{};
+    std::chrono::milliseconds total_solving_time{};
 
     int n_proc, n_workers;
     int n_cubing, n_solving, n_simplifying, n_terminated;

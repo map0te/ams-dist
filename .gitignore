@@ -1,9 +1,8 @@
 __pycache__
-simple_mcts
-beam_lookahead
-ams-dist
-portfolio-test
 *.out
 *.o
 build
 run_scripts
+
+ams-dist
+cube

@@ -446,13 +446,16 @@ void BeamLookahead::setup(int order, const char* infile, MPI_Comm comm) {
     if (m == -1 || m > n_vars) m = n_vars;
 }
 
-void BeamLookahead::lookahead() {
+bool BeamLookahead::lookahead() {
     std::vector<int> free_vars;
     for (int v = 1; v <= m; ++v) {
         if (is_preselected(v)) {
             free_vars.push_back(v);
         }
     }
+
+    if (free_vars.empty()) { return false; }
+
     const double lambda = 0.5;
     const double gamma = 0.2;
 
@@ -505,6 +508,7 @@ void BeamLookahead::lookahead() {
     });
 
     cubing_var = updated[0].seed_var;
+    return true;
 }
 
 int BeamLookahead::write_cubes(const char* infile, const char* outfile1, const char* outfile2) {

@@ -50,7 +50,7 @@ private:
 public:
     int cubing_var;
     void setup(int order, const char *infile, MPI_Comm comm);
-    void lookahead();
+    bool lookahead();
     int write_cubes(const char* infile, const char* outfile1, const char* outfile2);
     ~BeamLookahead();
 };

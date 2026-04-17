@@ -18,7 +18,7 @@ void print_help(const char* name) {
     std::cout << "  -v, --verbose           verbose active solver status" << std::endl;
     std::cout << "  -a, --aggressive        solve if num cubes decreases" << std::endl;
     std::cout << "  -s, --solfile FILE      output solution file            (default=none)" << std::endl;
-    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (defauult=60)" << std::endl;
+    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (defauult=10)" << std::endl;
     //std::cout << "  -c, --cutoffv VAL       variable cuttoff heuristic      (default=none)" << std::endl;
 }
 
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     instance.order = -1;
     instance.inprobing = 1;
     instance.cutoff_v = -1;
-    instance.twarmup = 60;
+    instance.twarmup = 10;
     instance.aggressive = false;
     instance.solution_file_name = 0;
     instance.verbose = false;
