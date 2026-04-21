@@ -1,6 +1,7 @@
 #ifndef CLAUSESHARER_HPP
 #define CLAUSESHARER_HPP
 
+#include <cstdint>
 #include <mpi.h>
 #include <vector>
 
@@ -33,6 +34,18 @@ class ClauseSharer : public CaDiCaL::Learner {
     int cas_flag1, cas_flag2;
     int n_read_cas_literals;
 
+    // bloom filter for clause deduplication
+    static constexpr size_t BLOOM_M = 1u << 23; // 8M bits, ~1MB
+    static constexpr int    BLOOM_K = 5;
+    uint64_t* bloom_bits;
+
+    static uint64_t bloom_hash (const int* lits, int n, uint64_t seed);
+    void bloom_add (const int* lits, int n);
+    bool bloom_contains (const int* lits, int n) const;
+
+    // staging buffer for clause currently being learned
+    std::vector<int> current_clause;
+
     void export_clauses ();
     void import_clauses ();
 public:
@@ -43,7 +56,7 @@ public:
     bool cb_has_external_clause ();
     int cb_add_external_clause_lit ();
     void learn_cas_clause (const std::vector<int>& cas_clause);
-    void cleanup ();    
+    void cleanup ();
 };
 
 #endif

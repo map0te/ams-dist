@@ -9,6 +9,40 @@
 #define MAX_CLAUSE_SIZE 11
 #define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
 
+uint64_t ClauseSharer::bloom_hash (const int* lits, int n, uint64_t seed) {
+    // XOR-based so order doesn't matter (same clause regardless of literal order)
+    uint64_t h = seed;
+    for (int i = 0; i < n; i++) {
+        uint64_t x = (uint64_t)(uint32_t)lits[i];
+        x ^= x >> 33;
+        x *= 0xff51afd7ed558ccdULL;
+        x ^= x >> 33;
+        x *= 0xc4ceb9fe1a85ec53ULL;
+        x ^= x >> 33;
+        h ^= x;
+    }
+    return h;
+}
+
+void ClauseSharer::bloom_add (const int* lits, int n) {
+    uint64_t h1 = bloom_hash(lits, n, 0xbf58476d1ce4e5b9ULL);
+    uint64_t h2 = bloom_hash(lits, n, 0x94d049bb133111ebULL);
+    for (int i = 0; i < BLOOM_K; i++) {
+        size_t pos = (h1 + (uint64_t)i * h2) % BLOOM_M;
+        bloom_bits[pos / 64] |= 1ULL << (pos % 64);
+    }
+}
+
+bool ClauseSharer::bloom_contains (const int* lits, int n) const {
+    uint64_t h1 = bloom_hash(lits, n, 0xbf58476d1ce4e5b9ULL);
+    uint64_t h2 = bloom_hash(lits, n, 0x94d049bb133111ebULL);
+    for (int i = 0; i < BLOOM_K; i++) {
+        size_t pos = (h1 + (uint64_t)i * h2) % BLOOM_M;
+        if (!(bloom_bits[pos / 64] >> (pos % 64) & 1)) return false;
+    }
+    return true;
+}
+
 ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
@@ -47,6 +81,8 @@ ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
 
     n_read_literals = 0;
     n_read_cas_literals = 0;
+
+    bloom_bits = new uint64_t[BLOOM_M / 64]();
 }
 
 ClauseSharer::~ClauseSharer () {
@@ -56,7 +92,8 @@ ClauseSharer::~ClauseSharer () {
     delete [] req1;
     delete [] req2;
     delete [] cas_req1;
-    delete [] cas_req2; 
+    delete [] cas_req2;
+    delete [] bloom_bits;
 }
 
 void ClauseSharer::export_clauses () {
@@ -180,6 +217,17 @@ void ClauseSharer::import_clauses () {
         import_buffer_size += count;
     }
 
+    // Add all received conflict clauses to the bloom filter so we don't
+    // re-export clauses that originated from another rank.
+    int i = 0;
+    while (i < import_buffer_size) {
+        int start = i;
+        while (i < import_buffer_size && import_buffer[i] != 0) i++;
+        if (i > start)
+            bloom_add(import_buffer + start, i - start);
+        i++; // skip the 0 terminator
+    }
+
     n_read_literals = 0;
     n_read_cas_literals = 0;
 }
@@ -191,11 +239,19 @@ bool ClauseSharer::learning (int size) {
 }
 
 void ClauseSharer::learn (int lit) {
-    if (using_export_buffer_1) {
-        export_buffer_1[export_buffer_1_size++] = lit;
-    } else {
-        export_buffer_2[export_buffer_2_size++] = lit;
+    if (lit != 0) {
+        current_clause.push_back(lit);
+        return;
     }
+    // Clause complete — check bloom filter before committing to export buffer
+    if (!bloom_contains(current_clause.data(), current_clause.size())) {
+        bloom_add(current_clause.data(), current_clause.size());
+        int* buf = using_export_buffer_1 ? export_buffer_1 : export_buffer_2;
+        int& sz  = using_export_buffer_1 ? export_buffer_1_size : export_buffer_2_size;
+        for (int l : current_clause) buf[sz++] = l;
+        buf[sz++] = 0;
+    }
+    current_clause.clear();
 }
 
 void ClauseSharer::learn_cas_clause (const std::vector<int>& cas_clause) {
