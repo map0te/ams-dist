@@ -181,30 +181,29 @@ int DistributedSolverProcess::solve () {
 
     std::filesystem::remove(input_file);
 
-    if (res != 0) { 
-        return res; 
-    }
-
-    // cube
-    write_dimacs_with_units (output_file.c_str());
-    bool cube_res = distributed_cube (MPI_COMM_SELF);
-    
-    if (!cube_res) {
-        delete solver;
-        delete propagator;
-        solver = new CaDiCaL::Solver ();
-        solver->set ("terminateint", 100);
-        propagator = new Propagator (instance, solver);
-        solver->set ("quiet", 1);
-        solver->read_dimacs (output_file.c_str(), max_var, true, incremental, cube_literals);
-        propagator->connect ();
-        res = solver->solve ();
-        solver->disconnect_terminator ();
-        propagator->disconnect ();
-        assert(res != 0);
-        cube->status = res;
-        cube->active = solver->active ();
-        append_solutions (propagator->solutions());
+    if (res == 0) {
+        // cube
+        write_dimacs_with_units (output_file.c_str());
+        bool cube_res = distributed_cube (MPI_COMM_SELF);
+        
+        if (!cube_res) {
+            delete solver;
+            delete propagator;
+            solver = new CaDiCaL::Solver ();
+            solver->set ("terminateint", 100);
+            propagator = new Propagator (instance, solver);
+            solver->set ("quiet", 1);
+            solver->read_dimacs (output_file.c_str(), max_var, true, incremental, cube_literals);
+            propagator->connect ();
+            res = solver->solve ();
+            propagator->disconnect ();
+            assert(res != 0);
+            cube->status = res;
+            cube->active = solver->active ();
+            append_solutions (propagator->solutions());
+            std::filesystem::remove(input_file);
+            res = 30;
+        }
     }
 
     delete propagator;

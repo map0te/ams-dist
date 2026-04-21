@@ -43,7 +43,7 @@ int Worker::recv_task() {
         }
         MPI_Send(&ncube, 1, MPI_INT, 0, M_NUMCUBE, MPI_COMM_WORLD);
         MPI_Send(new_cubes, ncube, MPI_CUBEINFO, 0, M_CUBEINFO, MPI_COMM_WORLD);
-        if (res != 0) {
+        if (res != 0 && res != 30) {
             MPI_Recv(NULL, 0, MPI_INT, 0, M_INTERRUPT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         return 1;

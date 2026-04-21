@@ -305,6 +305,8 @@ void Manager::start() {
 
         print_time(); printf("Cubes: %ld (d-cube: %d.%03ds, p-simplify: %d.%03ds)\n", 
             simplify_queue.size(), cube_s / 1000, cube_s % 1000, simp_s / 1000, simp_s % 1000); fflush(stdout);
+        
+        cube_s = 0;
     }
 
     print_time(); printf("Generated %ld cubes\n", simplify_queue.size()); fflush(stdout);
