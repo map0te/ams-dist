@@ -5,8 +5,11 @@
 #include "symbreak.hpp"
 
 Propagator::Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver,
-    bool portfolio_mode, MPI_Comm comm) : 
-    solver(solver), portfolio_mode(portfolio_mode), comm(comm) {
+    bool portfolio_mode, MPI_Comm comm, bool share_cas_clauses) : 
+    solver(solver), 
+    portfolio_mode(portfolio_mode), 
+    comm(comm),
+    share_cas_clauses(share_cas_clauses) {
 
     symmetrybreaker = new SymmetryBreaker (instance.order);
     if (portfolio_mode) {
@@ -94,10 +97,9 @@ int Propagator::cb_add_reason_clause_lit (int plit) {
 
 bool Propagator::cb_has_external_clause () {
     has_cas_clause = symmetrybreaker->cb_has_external_clause ();
-    if (has_cas_clause && portfolio_mode) {
-        for (auto& clause : symmetrybreaker->cas_clauses) {
-            clausesharer->learn_cas_clause(clause);
-        }
+    if (has_cas_clause && portfolio_mode && share_cas_clauses) {
+        assert (!symmetrybreaker->cas_clauses.empty());
+        clausesharer->learn_cas_clause(symmetrybreaker->cas_clauses.front());
     }
     bool has_shared_clause = 
         (portfolio_mode) ? clausesharer->cb_has_external_clause () : false;

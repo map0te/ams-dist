@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
         {"solfile", required_argument, 0, 's'},
         {"aggressive", no_argument, 0, 'a'},
         {"twarmup", required_argument, 0, 't'},
+        {"verbose", no_argument, 0, 'v'},
+        {"no_share_cas", no_argument, 0, 'c'},
         {0, 0, 0, 0}
     };
 
@@ -44,11 +46,12 @@ int main(int argc, char **argv) {
     instance.aggressive = false;
     instance.solution_file_name = 0;
     instance.verbose = false;
+    instance.share_cas = true;
 
     std::string solution_file_name_str;
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvas:t:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvasc:t:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 if (!rank) {
@@ -65,6 +68,9 @@ int main(int argc, char **argv) {
             case 's':
                 solution_file_name_str = optarg;
                 instance.solution_file_name = solution_file_name_str.c_str();
+                break;
+            case 'c':
+                instance.share_cas = false;
                 break;
             case 't':
                 instance.twarmup = atoi(optarg);

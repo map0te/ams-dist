@@ -218,7 +218,7 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
     std::string input_file, output_file;
 
     solver = new CaDiCaL::Solver ();
-    propagator = new Propagator (instance, solver, true, comm);
+    propagator = new Propagator (instance, solver, true, comm, instance.share_cas);
 
     input_file = get_input_filename (true);
     output_file = input_file + ".simp";

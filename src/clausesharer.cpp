@@ -6,12 +6,15 @@
 #include "def.hpp"
 
 #define MIN_SEND_SIZE 1024
-#define MAX_CLAUSE_SIZE 11
+#define MAX_CLAUSE_SIZE (10 + 1)
 #define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
 
 ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
+
+    total_imported_cas_literals = 0;
+    total_imported_literals = 0;
 
     using_export_buffer_1 = true;
     using_cas_export_buffer_1 = true;
@@ -50,6 +53,7 @@ ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
 }
 
 ClauseSharer::~ClauseSharer () {
+    //printf("imported literals: shared %ld, cas %ld\n", total_imported_literals, total_imported_cas_literals); fflush(stdout);
     delete [] import_buffer;
     delete [] export_buffer_1;
     delete [] export_buffer_2;
@@ -180,6 +184,8 @@ void ClauseSharer::import_clauses () {
         import_buffer_size += count;
     }
 
+    total_imported_literals += n_read_literals;
+    total_imported_cas_literals += n_read_cas_literals;
     n_read_literals = 0;
     n_read_cas_literals = 0;
 }

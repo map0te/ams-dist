@@ -10,6 +10,10 @@ class ClauseSharer : public CaDiCaL::Learner {
     MPI_Comm comm;
     int rank, size;
 
+    // statistics
+    size_t total_imported_cas_literals;
+    size_t total_imported_literals;
+
     // double buffering for conflict clauses
     bool using_export_buffer_1;
     int* import_buffer;

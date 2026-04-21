@@ -20,10 +20,11 @@ class Propagator : CaDiCaL::ExternalPropagator, CaDiCaL::Terminator {
     bool has_cas_clause;
     bool interrupted = false;
     MPI_Comm comm;
+    bool share_cas_clauses;
     int rank, size;
 public:
     // Propagator
-    Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver, bool portfolio_mode = false, MPI_Comm comm = MPI_COMM_WORLD);
+    Propagator (const InstanceInfo& instance, CaDiCaL::Solver* solver, bool portfolio_mode = false, MPI_Comm comm = MPI_COMM_WORLD, bool share_cas_clauses = true);
     ~Propagator ();
     long n_solutions ();
     std::vector<std::vector<int>>& solutions ();

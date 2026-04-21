@@ -171,7 +171,7 @@ void Manager::exec_psimp_task() {
     CubeInfo cube = simplify_queue[0];
     solver->set_cube (&cube);
     solver->portfolio_simplify (comm);
-    if (cube.status == UNKNOWN) {
+    if (cube.status == UNKNOWN) {   
         cube_queue.push_back(cube);
     }
 }
@@ -381,7 +381,7 @@ void Manager::start() {
     printf("----- Unsatisfiable -----\n"); fflush(stdout);
 
     std::vector<int> local_serialized_solutions;
-    for (const auto& solution : solutions) {
+    for (const auto& solution : solver->solutions()) {
         for (auto lit : solution) {
             local_serialized_solutions.push_back (lit);
         }

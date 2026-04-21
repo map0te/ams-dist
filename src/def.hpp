@@ -108,6 +108,7 @@ struct InstanceInfo {
 	int twarmup;
 	bool aggressive;
 	bool verbose;
+	bool share_cas;
 	std::string top_name;
 	const char* solution_file_name;
 };
