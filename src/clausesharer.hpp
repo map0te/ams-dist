@@ -35,8 +35,8 @@ class ClauseSharer : public CaDiCaL::Learner {
     int n_read_cas_literals;
 
     // bloom filter for clause deduplication
-    static constexpr size_t BLOOM_M = 1u << 23; // 8M bits, ~1MB
-    static constexpr int    BLOOM_K = 5;
+    static constexpr size_t BLOOM_M = 1u << 25; // 32M bits, ~4MB
+    static constexpr int    BLOOM_K = 7;
     uint64_t* bloom_bits;
 
     static uint64_t bloom_hash (const int* lits, int n, uint64_t seed);

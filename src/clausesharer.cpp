@@ -6,7 +6,7 @@
 #include "def.hpp"
 
 #define MIN_SEND_SIZE 1024
-#define MAX_CLAUSE_SIZE 11
+#define MAX_CLAUSE_SIZE (63+1)
 #define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
 
 uint64_t ClauseSharer::bloom_hash (const int* lits, int n, uint64_t seed) {
