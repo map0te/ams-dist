@@ -1,7 +1,6 @@
 #ifndef CLAUSESHARER_HPP
 #define CLAUSESHARER_HPP
 
-#include <chrono>
 #include <cstdint>
 #include <mpi.h>
 #include <vector>
@@ -46,12 +45,6 @@ class ClauseSharer : public CaDiCaL::Learner {
 
     // staging buffer for clause currently being learned
     std::vector<int> current_clause;
-
-    // timing accumulators
-    double t_testall = 0.0;
-    double t_iprobe  = 0.0;
-    long   n_testall = 0;
-    long   n_iprobe  = 0;
 
     void export_clauses ();
     void import_clauses ();

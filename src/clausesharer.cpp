@@ -1,5 +1,4 @@
 #include <cassert>
-#include <cstdio>
 
 #include "internal.hpp"
 
@@ -9,22 +8,6 @@
 #define MIN_SEND_SIZE 1024
 #define MAX_CLAUSE_SIZE (63+1)
 #define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
-
-#define TIME_TESTALL(call) \
-    do { \
-        auto _t0 = std::chrono::steady_clock::now(); \
-        call; \
-        t_testall += std::chrono::duration<double>(std::chrono::steady_clock::now() - _t0).count(); \
-        n_testall++; \
-    } while (0)
-
-#define TIME_IPROBE(call) \
-    do { \
-        auto _t0 = std::chrono::steady_clock::now(); \
-        call; \
-        t_iprobe += std::chrono::duration<double>(std::chrono::steady_clock::now() - _t0).count(); \
-        n_iprobe++; \
-    } while (0)
 
 uint64_t ClauseSharer::bloom_hash (const int* lits, int n, uint64_t seed) {
     // XOR-based so order doesn't matter (same clause regardless of literal order)
@@ -115,28 +98,28 @@ ClauseSharer::~ClauseSharer () {
 
 void ClauseSharer::export_clauses () {
     if (!flag1) {
-        TIME_TESTALL(MPI_Testall(size, req1, &flag1, MPI_STATUS_IGNORE));
+        MPI_Testall(size, req1, &flag1, MPI_STATUS_IGNORE);
         if (flag1) {
             MPI_Waitall(size, req1, MPI_STATUS_IGNORE);
             export_buffer_1_size = 0;
         }
     }
     if (!flag2) {
-        TIME_TESTALL(MPI_Testall(size, req2, &flag2, MPI_STATUS_IGNORE));
+        MPI_Testall(size, req2, &flag2, MPI_STATUS_IGNORE);
         if (flag2) {
-            MPI_Waitall(size, req2, MPI_STATUS_IGNORE);
+            MPI_Waitall(size, req2, MPI_STATUS_IGNORE);   
             export_buffer_2_size = 0;
         }
     }
     if (!cas_flag1) {
-        TIME_TESTALL(MPI_Testall(size, cas_req1, &cas_flag1, MPI_STATUS_IGNORE));
+        MPI_Testall(size, cas_req1, &cas_flag1, MPI_STATUS_IGNORE);
         if (cas_flag1) {
             MPI_Waitall(size, cas_req1, MPI_STATUS_IGNORE);
             cas_export_buffer_1.clear();
         }
     }
     if (!cas_flag2) {
-        TIME_TESTALL(MPI_Testall(size, cas_req2, &cas_flag2, MPI_STATUS_IGNORE));
+        MPI_Testall(size, cas_req2, &cas_flag2, MPI_STATUS_IGNORE);
         if (cas_flag2) {
             MPI_Waitall(size, cas_req2, MPI_STATUS_IGNORE);
             cas_export_buffer_2.clear();
@@ -206,7 +189,7 @@ void ClauseSharer::import_clauses () {
     MPI_Status status;
     // cas clauses
     cas_import_buffer.clear();
-    TIME_IPROBE(MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status));
+    MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status);
     while (flag) {
         MPI_Get_count(&status, MPI_INT, &count);
         int old_buffer_size = cas_import_buffer.size();
@@ -220,12 +203,12 @@ void ClauseSharer::import_clauses () {
             comm,
             MPI_STATUS_IGNORE
         );
-        TIME_IPROBE(MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status));
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &flag, &status);
     }
     // conflict clauses
     import_buffer_size = 0;
     while (import_buffer_size < (size-1) * BUFSIZE) {
-        TIME_IPROBE(MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status));
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &flag, &status);
         if (!flag) break;
         MPI_Get_count(&status, MPI_INT, &count);
         assert (count < BUFSIZE);
@@ -319,15 +302,15 @@ void ClauseSharer::cleanup () {
         MPI_Request_free(&req);
     }
     while (num_completed < 2 * (size - 1)) {
-        TIME_IPROBE(MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &clauses_flag, &status));
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CASCLAUSES, comm, &clauses_flag, &status);
         if (clauses_flag) {
             MPI_Get_count(&status, MPI_INT, &count);
             if (count == 0) { num_completed++; }
             cas_import_buffer.resize(count);
-            MPI_Recv(cas_import_buffer.data(), count, MPI_INT,
+            MPI_Recv(cas_import_buffer.data(), count, MPI_INT, 
                 status.MPI_SOURCE, M_CASCLAUSES, comm, MPI_STATUS_IGNORE);
         }
-        TIME_IPROBE(MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &clauses_flag, &status));
+        MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &clauses_flag, &status);
         if (clauses_flag) {
             MPI_Get_count(&status, MPI_INT, &count);
             if (count == 0) { num_completed++; }
@@ -339,8 +322,4 @@ void ClauseSharer::cleanup () {
     MPI_Waitall(size, req2, MPI_STATUS_IGNORE);
     MPI_Waitall(size, cas_req1, MPI_STATUS_IGNORE);
     MPI_Waitall(size, cas_req2, MPI_STATUS_IGNORE);
-
-    printf("[rank %d] MPI_Testall: %.6fs (%ld calls)  MPI_Iprobe: %.6fs (%ld calls)\n",
-        rank, t_testall, n_testall, t_iprobe, n_iprobe);
-    fflush(stdout);
 }
