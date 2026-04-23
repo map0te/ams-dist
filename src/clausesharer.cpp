@@ -6,7 +6,7 @@
 #include "def.hpp"
 
 #define MIN_SEND_SIZE 1024
-#define MAX_CLAUSE_SIZE (10 + 1)
+#define MAX_CLAUSE_SIZE (15 + 1)
 #define BUFSIZE (MIN_SEND_SIZE + 2 * MAX_CLAUSE_SIZE)
 
 ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
