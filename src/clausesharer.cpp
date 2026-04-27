@@ -53,14 +53,13 @@ ClauseSharer::ClauseSharer (MPI_Comm comm) : comm(comm) {
 }
 
 ClauseSharer::~ClauseSharer () {
-    //printf("imported literals: shared %ld, cas %ld\n", total_imported_literals, total_imported_cas_literals); fflush(stdout);
     delete [] import_buffer;
     delete [] export_buffer_1;
     delete [] export_buffer_2;
     delete [] req1;
     delete [] req2;
     delete [] cas_req1;
-    delete [] cas_req2; 
+    delete [] cas_req2;
 }
 
 void ClauseSharer::export_clauses () {
@@ -74,7 +73,7 @@ void ClauseSharer::export_clauses () {
     if (!flag2) {
         MPI_Testall(size, req2, &flag2, MPI_STATUS_IGNORE);
         if (flag2) {
-            MPI_Waitall(size, req2, MPI_STATUS_IGNORE);   
+            MPI_Waitall(size, req2, MPI_STATUS_IGNORE);
             export_buffer_2_size = 0;
         }
     }
@@ -96,7 +95,7 @@ void ClauseSharer::export_clauses () {
         if (flag2 && export_buffer_1_size >= MIN_SEND_SIZE) {
             for (int dst = 0; dst < size; dst++) {
                 if (dst == rank) continue;
-                MPI_Isend(export_buffer_1, export_buffer_1_size, MPI_INT, 
+                MPI_Isend(export_buffer_1, export_buffer_1_size, MPI_INT,
                     dst, M_CLAUSES, comm, &req1[dst]);
             }
             flag1 = false;
@@ -106,7 +105,7 @@ void ClauseSharer::export_clauses () {
         if (flag1 && export_buffer_2_size >= MIN_SEND_SIZE) {
             for (int dst = 0; dst < size; dst++) {
                 if (dst == rank) continue;
-                MPI_Isend(export_buffer_2, export_buffer_2_size, MPI_INT, 
+                MPI_Isend(export_buffer_2, export_buffer_2_size, MPI_INT,
                     dst, M_CLAUSES, comm, &req2[dst]);
             }
             flag2 = false;
@@ -179,7 +178,7 @@ void ClauseSharer::import_clauses () {
         if (!flag) break;
         MPI_Get_count(&status, MPI_INT, &count);
         assert (count < BUFSIZE);
-        MPI_Recv(import_buffer + import_buffer_size, count, MPI_INT, 
+        MPI_Recv(import_buffer + import_buffer_size, count, MPI_INT,
             status.MPI_SOURCE, M_CLAUSES, comm, MPI_STATUS_IGNORE);
         import_buffer_size += count;
     }
@@ -215,14 +214,14 @@ void ClauseSharer::learn_cas_clause (const std::vector<int>& cas_clause) {
     if (using_cas_export_buffer_1) {
         cas_export_buffer_1.push_back(0);
     } else {
-        cas_export_buffer_2.push_back(0);   
+        cas_export_buffer_2.push_back(0);
     }
 }
 
 bool ClauseSharer::cb_has_external_clause () {
     if (cas_import_buffer.size() - n_read_cas_literals) {
         return true;
-    } 
+    }
     if (import_buffer_size - n_read_literals) {
         return true;
     }
@@ -239,7 +238,7 @@ int ClauseSharer::cb_add_external_clause_lit () {
 }
 
 void ClauseSharer::cleanup () {
-    // cleans up any outstanding MPI_Isend 
+    // cleans up any outstanding MPI_Isend
     MPI_Request req;
     int num_completed = 0;
     int count, clauses_flag;
@@ -257,7 +256,7 @@ void ClauseSharer::cleanup () {
             MPI_Get_count(&status, MPI_INT, &count);
             if (count == 0) { num_completed++; }
             cas_import_buffer.resize(count);
-            MPI_Recv(cas_import_buffer.data(), count, MPI_INT, 
+            MPI_Recv(cas_import_buffer.data(), count, MPI_INT,
                 status.MPI_SOURCE, M_CASCLAUSES, comm, MPI_STATUS_IGNORE);
         }
         MPI_Iprobe(MPI_ANY_SOURCE, M_CLAUSES, comm, &clauses_flag, &status);

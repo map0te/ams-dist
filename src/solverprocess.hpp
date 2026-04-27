@@ -24,9 +24,7 @@ class DistributedSolverProcess : CaDiCaL::Terminator {
 
     std::chrono::steady_clock::time_point start_time;
 
-    inline void write_dimacs_with_units (const std::string& path);
     inline void append_solutions(std::vector<std::vector<int>>& new_solutions);
-    void diversify (MPI_Comm comm);
 public:
     DistributedSolverProcess(const InstanceInfo& instance);
     void set_cube (CubeInfo* cube);

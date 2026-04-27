@@ -36,9 +36,8 @@ std::vector<std::vector<int>>& Propagator::solutions () {
 
 void Propagator::connect () {
     solver->connect_external_propagator (this);
-    if (portfolio_mode) { 
+    if (portfolio_mode) {
         solver->connect_learner (clausesharer);
-        //solver->connect_importer (clausesharer);
         solver->connect_terminator (this);
     }
     std::vector<int> vars = symmetrybreaker->observed_vars ();
@@ -66,7 +65,6 @@ void Propagator::disconnect () {
     solver->disconnect_external_propagator ();
     if (portfolio_mode) {
         solver->disconnect_learner ();
-        //solver->disconnect_importer ();
         solver->disconnect_terminator ();
     }
 }

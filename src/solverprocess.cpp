@@ -10,7 +10,6 @@
 #include "def.hpp"
 #include "propagator.hpp"
 #include "solverprocess.hpp"
-#include "util.hpp"
 
 inline void DistributedSolverProcess::append_solutions(std::vector<std::vector<int>>& new_solutions) {
     solutions_.insert(solutions_.end(), new_solutions.begin(), new_solutions.end());
@@ -38,67 +37,6 @@ inline std::string DistributedSolverProcess::get_output_filename (int index) {
     } else {
         return instance.top_name + "." + std::string(cube->id) + "2.cnf";
     }
-}
-
-inline void DistributedSolverProcess::write_dimacs_with_units (const std::string& path) {
-    std::vector<int> units;
-    for (int var = 1; var <= solver->vars(); var++) {
-        int fix = solver->fixed(var);
-        if (fix != 0) units.push_back(fix > 0 ? var : -var);
-    }
-
-    solver->write_dimacs(path.c_str(), solver->vars());
-
-    if (units.empty()) return;
-
-    FILE* f = fopen(path.c_str(), "r+");
-
-    char line[64];
-    fpos_t header_pos;
-    while (true) {
-        fgetpos(f, &header_pos);
-        fgets(line, sizeof(line), f);
-        if (line[0] == 'p') break;
-    }
-
-    int vars, clauses;
-    sscanf(line, "p cnf %d %d", &vars, &clauses);
-    int new_clauses = clauses + (int)units.size();
-
-    char old_header[64], new_header[64];
-    int old_len = snprintf(old_header, sizeof(old_header), "p cnf %d %d", vars, clauses);
-    int new_len = snprintf(new_header, sizeof(new_header), "p cnf %d %d", vars, new_clauses);
-
-    if (new_len <= old_len) {
-        // Safe to patch in-place — pad to preserve byte offsets
-        while (new_len < old_len) new_header[new_len++] = ' ';
-        new_header[new_len] = '\0';
-        fsetpos(f, &header_pos);
-        fputs(new_header, f);
-        fseek(f, 0, SEEK_END);
-    } else {
-        // Header grew — full rewrite from header position onward
-        // Read everything after the header
-        fseek(f, 0, SEEK_END);
-        long file_size = ftell(f);
-        fpos_t body_pos;
-        fgetpos(f, &body_pos); // end of header line
-        // re-find body start
-        fsetpos(f, &header_pos);
-        fgets(line, sizeof(line), f); // skip old header
-        long body_start = ftell(f);
-        long body_size = file_size - body_start;
-        std::vector<char> body(body_size);
-        fread(body.data(), 1, body_size, f);
-
-        fsetpos(f, &header_pos);
-        fprintf(f, "%s\n", new_header);
-        fwrite(body.data(), 1, body_size, f);
-    }
-
-    for (int lit : units) fprintf(f, "%d 0\n", lit);
-
-    fclose(f);
 }
 
 
@@ -130,19 +68,20 @@ int DistributedSolverProcess::simplify () {
     solver->set ("quiet", 1);
     solver->set ("elim", 0);
     solver->set ("factor", 0);
+    propagator->connect ();
     solver->read_dimacs (input_file.c_str(), max_var, true, incremental, cube_literals);
 
-    propagator->connect ();
     res = solver->solve ();
-    propagator->disconnect ();
 
     cube->status = res;
     cube->active = solver->active ();
     append_solutions (propagator->solutions());
 
     if (res == 0) {
-        write_dimacs_with_units (output_file.c_str());
+        solver->write_dimacs (output_file.c_str(), solver->vars());
     }
+
+    propagator->disconnect ();
 
     std::filesystem::remove(input_file);
 
@@ -165,15 +104,14 @@ int DistributedSolverProcess::solve () {
     output_file = input_file + ".simp";
 
     solver->set ("quiet", 1);
+    propagator->connect ();
     solver->read_dimacs (input_file.c_str(), max_var, true, incremental, cube_literals);
 
     start_time = std::chrono::steady_clock::now();
-    propagator->connect ();
     solver->connect_terminator (this);
     cube->active = solver->irredundant ();
     res = solver->solve ();
     solver->disconnect_terminator ();
-    propagator->disconnect ();
 
     cube->status = res;
     cube->active = solver->active ();
@@ -183,28 +121,33 @@ int DistributedSolverProcess::solve () {
 
     if (res == 0) {
         // cube
-        write_dimacs_with_units (output_file.c_str());
+        solver->write_dimacs (output_file.c_str(), solver->vars());
         bool cube_res = distributed_cube (MPI_COMM_SELF);
+        propagator->disconnect ();
         
         if (!cube_res) {
             delete solver;
             delete propagator;
+            printf("continuing solving %s\n", cube->id);
             solver = new CaDiCaL::Solver ();
             solver->set ("terminateint", 100);
             propagator = new Propagator (instance, solver);
             solver->set ("quiet", 1);
-            solver->read_dimacs (output_file.c_str(), max_var, true, incremental, cube_literals);
             propagator->connect ();
+            solver->read_dimacs (output_file.c_str(), max_var, true, incremental, cube_literals);
             res = solver->solve ();
             propagator->disconnect ();
             assert(res != 0);
             cube->status = res;
             cube->active = solver->active ();
             append_solutions (propagator->solutions());
-            std::filesystem::remove(input_file);
+            std::filesystem::remove(output_file);
             res = 30;
         }
+    } else {
+        propagator->disconnect ();
     }
+    
 
     delete propagator;
     delete solver;
@@ -227,7 +170,7 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
     solver->set ("quiet", 1);
     solver->set ("elim", 0);
     solver->set ("factor", 0);
-
+    propagator->connect ();
     solver->read_dimacs (input_file.c_str(), max_var, true, incremental, cube_literals);
 
     // MPI
@@ -235,7 +178,7 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
     MPI_Comm_rank(comm, &job_rank);
 
     // diversify
-    std::srand(job_rank); 
+    std::srand(job_rank);
     bool randomBool = std::rand() % 2;
     for (int i = 1; i <= max_var; i++) {
         if (randomBool) {
@@ -245,9 +188,7 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
         }
     }
 
-    propagator->connect ();
     res = solver->solve ();
-    propagator->disconnect ();
 
     // collect results from solvers
     if (job_rank == 0) {
@@ -261,12 +202,14 @@ int DistributedSolverProcess::portfolio_simplify (MPI_Comm comm) {
     append_solutions (propagator->solutions());
 
     if (job_rank == 0 && res == 0) {
-        write_dimacs_with_units (output_file.c_str());
+        solver->write_dimacs (output_file.c_str(), solver->vars());
     }
 
     if (job_rank == 0) {
         std::filesystem::remove (input_file);
     }
+
+    propagator->disconnect ();
 
     delete propagator;
     delete solver;
@@ -306,14 +249,12 @@ bool DistributedSolverProcess::terminate () {
     MPI_Status status;
     int flag;
     MPI_Iprobe(0, M_INTERRUPT, MPI_COMM_WORLD, &flag, &status);
-    if (!flag) { 
+    if (!flag) {
         MPI_Request req;
-    //if (solver->irredundant () < cube->active) {
         cube->active = solver->irredundant ();
         MPI_Isend(&cube->active, 1, MPI_INT, 0, M_ACTIVE, MPI_COMM_WORLD, &req);
         MPI_Request_free(&req);
-    //}
-        return false; 
+        return false;
     }
     MPI_Recv(NULL, 0, MPI_INT, 0, M_INTERRUPT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     return true;

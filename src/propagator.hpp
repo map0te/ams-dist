@@ -30,7 +30,6 @@ public:
     std::vector<std::vector<int>>& solutions ();
     void connect ();
     void disconnect ();
-    void terminate_all ();
 
     // CaDiCaL::ExternalPropagator
     void notify_assignment (int lit, bool is_fixed);

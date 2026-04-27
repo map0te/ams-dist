@@ -15,7 +15,7 @@ SymmetryBreaker::SymmetryBreaker (int order) {
     num_edge_vars = n * (n-1) / 2;
     assign = new int[num_edge_vars];
     fixed = new bool[num_edge_vars];
-    colsuntouched = new int[n];
+    colsuntouched = new int[n]();
     
     for (int i = 0; i < num_edge_vars; i++) {
         assign[i] = l_Undef;

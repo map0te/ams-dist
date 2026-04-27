@@ -18,8 +18,8 @@ void print_help(const char* name) {
     std::cout << "  -v, --verbose           verbose active solver status" << std::endl;
     std::cout << "  -a, --aggressive        solve if num cubes decreases" << std::endl;
     std::cout << "  -s, --solfile FILE      output solution file            (default=none)" << std::endl;
-    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (defauult=10)" << std::endl;
-    //std::cout << "  -c, --cutoffv VAL       variable cuttoff heuristic      (default=none)" << std::endl;
+    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (default=10)" << std::endl;
+    std::cout << "  -c, --no_share_cas      disable CAS clause sharing" << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     std::string solution_file_name_str;
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvasc:t:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvas:ct:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 if (!rank) {
@@ -140,24 +140,17 @@ int main(int argc, char **argv) {
     if (rank == 0) {
         Manager manager(instance);
         manager.init_time();
-        manager.print_time();
-        printf("----- ams-dist -----\n");
-        manager.print_time();
-        printf("Running on %d cores\n", size);
-        manager.print_time();
-        printf("Instance: %s\n", positional_args[1].c_str()); fflush(stdout);
-        manager.print_time();
-        printf("Order: %d\n", instance.order); fflush(stdout);
-        manager.print_time();
-        printf("Options: ");
-        printf("twarmup=%d", instance.twarmup);
-        if (instance.verbose) { printf(", verbose"); }
-        if (instance.aggressive) { printf(", aggressive"); }
-        printf("\n");
-        manager.print_time();
-        printf("Working directory: %s\n", positional_args[2].c_str()); fflush(stdout);
-        manager.print_time();
-        printf("Copying instance into working directory...\n"); fflush(stdout);
+        manager.log("----- ams-dist -----\n");
+        manager.log("Running on %d cores\n", size);
+        manager.log("Instance: %s\n", positional_args[1].c_str());
+        manager.log("Order: %d\n", instance.order);
+        manager.log("Options: --twarmup=%d%s%s%s\n",
+            instance.twarmup,
+            instance.verbose   ? ", --verbose"      : "",
+            instance.aggressive ? ", --aggressive"  : "",
+            !instance.share_cas ? ", --no_share_cas" : "");
+        manager.log("Working directory: %s\n", positional_args[2].c_str());
+        manager.log("Copying instance into working directory...\n");
         try {
             std::filesystem::copy_file(positional_args[1], instance.top_name, 
                 std::filesystem::copy_options::overwrite_existing);
