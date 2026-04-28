@@ -201,7 +201,7 @@ int DistributedSolverProcess::solve () {
             cube->status = res;
             cube->active = solver->active ();
             append_solutions (propagator->solutions());
-            std::filesystem::remove(input_file);
+            std::filesystem::remove(output_file);
             res = 30;
         }
     }

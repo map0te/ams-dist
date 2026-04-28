@@ -215,7 +215,7 @@ void BeamLookahead::parse_cnf(const char *filename) {
         } else {
             watched[i-1].first = 0;
             watched[i-1].second = 1;
-            watch_list[lit_index(clause_literals[clause_idx[i-i]])].push_back(i-1);
+            watch_list[lit_index(clause_literals[clause_idx[i-1]])].push_back(i-1);
             watch_list[lit_index(clause_literals[clause_idx[i-1]+1])].push_back(i-1);
         }
     }
