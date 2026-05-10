@@ -16,9 +16,8 @@ void print_help(const char* name) {
     std::cout << "Options:" << std::endl;
     std::cout << "  -h, --help              show help" << std::endl;
     std::cout << "  -v, --verbose           verbose active solver status" << std::endl;
-    std::cout << "  -a, --aggressive        solve if num cubes decreases" << std::endl;
-    std::cout << "  -s, --solfile FILE      output solution file            (default=none)" << std::endl;
-    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (defauult=10)" << std::endl;
+    std::cout << "  -t, --twarmup VAL       time before interrupt (s)       (default=10)" << std::endl;
+	std::cout << "  -c, --no_share_cas      turn off CAS clause sharing" << std::endl;
     //std::cout << "  -c, --cutoffv VAL       variable cuttoff heuristic      (default=none)" << std::endl;
 }
 
