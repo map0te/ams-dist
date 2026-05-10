@@ -1,7 +1,7 @@
 # ams-dist
 
 A distributed cube-n-conquer solver intended for hard combinatorial problems.  
-Authors: Piyush Jha, Zhengyu Li, Maxim Zhulin
+Authors: [Maxim Zhulin](https://map0te.github.io/), [Piyush Jha](https://piyush-j.github.io/), [Zhengyu Li](https://404briannotfound.tech/)
 
 ---
 
@@ -36,9 +36,8 @@ Solve `FILE` with order `ORDER` in the working directory `PATH`.
 |------|------|-------------|--------|
 | `-h` | `--help` | show help message | — |
 | `-v` | `--verbose` | enable verbose solver status output | Disabled |
-| `-a` | `--aggressive` | force solving if the number of cubes decreases | Disabled |
-| `-s FILE` | `--solfile FILE` | output solution file | stdout |
-| `-t VAL` | `--twarmup VAL` | time before interrupt (seconds) | `60` |
+| `-t VAL` | `--twarmup VAL` | time before interrupt (seconds) | `10` |
+| `-c` | `--no_share_cas` | turn off CAS clause sharing | Disabled |
 
 ---
 ### Example
