@@ -393,7 +393,7 @@ void Manager::start() {
     int* sol_counts = new int [size];
     int* sol_counts_displs = new int [size];
     int sol_counts_total;
-    int local_count = solutions.size();
+    int local_count = local_serialized_count;
     sol_counts_displs[0] = 0;
 
     MPI_Gather(&local_count, 1, MPI_INT, sol_counts, 1, MPI_INT, 0, MPI_COMM_WORLD);
