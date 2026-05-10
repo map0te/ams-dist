@@ -535,7 +535,7 @@ int BeamLookahead::write_cubes(const char* infile, const char* outfile1, const c
         fprintf(out2_ptr, "p cnf %d %d\n", n_vars, n_clauses+1);
         fprintf(out1_ptr, "%d 0\n", cubing_var);
         fprintf(out2_ptr, "-%d 0\n", cubing_var);
-        int readlen = 16777216;
+        int readlen = 4096;
         char buf[readlen];
         int read = 0;
         while ((read = fread(buf, 1, readlen, in_ptr)) == readlen){
