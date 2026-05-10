@@ -45,6 +45,3 @@ cadical/build/libcadical.a: cadical/src/*.cpp
 
 ams-dist: cadical/build/libcadical.a build/beamlookahead.o build/symbreak.o build/clausesharer.o build/worker.o build/manager.o build/statustracker.o build/propagator.o build/solverprocess.o build/util.o src/main.cpp
 	$(CC) $(CFLAGS)	build/*.o src/main.cpp -o ams-dist $(CADICAL)
-
-portfolio-test: cadical/build/libcadical.a build/symbreak.o build/clausesharer.o build/propagator.o test/portfolio.cpp
-	$(CC) $(CFLAGS) build/symbreak.o build/clausesharer.o build/propagator.o test/portfolio.cpp -o portfolio-test $(CADICAL)
