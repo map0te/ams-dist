@@ -3,6 +3,11 @@
 A distributed cube-n-conquer solver intended for hard combinatorial problems.  
 Authors: [Maxim Zhulin](https://map0te.github.io/), [Piyush Jha](https://piyush-j.github.io/), [Zhengyu Li](https://404briannotfound.tech/)
 
+# Note
+
+Currently supports only kochen-specker instances. The symmetry breaker for these problems is currently hard-coded into the pipeline.
+Furthermore since we run all-sat, we expect the whole instance to be unsatisfiable.
+
 ---
 
 ### Build
